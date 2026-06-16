@@ -551,8 +551,10 @@ function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ credential: response.credential }),
         })
-        if (!authResponse.ok) throw new Error('No se pudo iniciar sesion.')
-        const payload = (await authResponse.json()) as { user: AuthUser; session: AuthSession }
+        const payload = (await authResponse.json()) as { user?: AuthUser; session?: AuthSession; message?: string }
+        if (!authResponse.ok || !payload.user || !payload.session) {
+          throw new Error(payload.message ?? 'No se pudo iniciar sesion.')
+        }
         setAuthUser(payload.user)
         setAuthSession(payload.session)
         setAuthMessage(`Sesion iniciada: ${payload.user.email}`)

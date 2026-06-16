@@ -354,64 +354,73 @@ app.get('/api/health', (_request, response) => {
 })
 
 app.post('/api/auth/google', async (request, response) => {
-  if (!googleClientId) {
-    response.status(500).json({ ok: false, message: 'GOOGLE_CLIENT_ID no esta configurado en el backend.' })
-    return
-  }
+  try {
+    if (!googleClientId) {
+      response.status(500).json({ ok: false, message: 'GOOGLE_CLIENT_ID no esta configurado en el backend.' })
+      return
+    }
 
-  const credential = String(request.body?.credential ?? '')
-  if (!credential) {
-    response.status(400).json({ ok: false, message: 'Falta credential de Google.' })
-    return
-  }
+    const credential = String(request.body?.credential ?? '')
+    if (!credential) {
+      response.status(400).json({ ok: false, message: 'Falta credential de Google.' })
+      return
+    }
 
-  const ticket = await authClient.verifyIdToken({
-    idToken: credential,
-    audience: googleClientId,
-  })
-  const payload = ticket.getPayload()
+    const ticket = await authClient.verifyIdToken({
+      idToken: credential,
+      audience: googleClientId,
+    })
+    const payload = ticket.getPayload()
 
-  if (!payload?.sub || !payload.email) {
-    response.status(401).json({ ok: false, message: 'Token de Google invalido.' })
-    return
-  }
+    if (!payload?.sub || !payload.email) {
+      response.status(401).json({ ok: false, message: 'Token de Google invalido.' })
+      return
+    }
 
-  const now = new Date().toISOString()
-  const existingUserId = await findUserIdByGoogleSub(payload.sub)
-  const userId = existingUserId ?? `google_${payload.sub}`
+    const now = new Date().toISOString()
+    const existingUserId = await findUserIdByGoogleSub(payload.sub)
+    const userId = existingUserId ?? `google_${payload.sub}`
 
-  await upsertGoogleUser({
-    id: userId,
-    google_sub: payload.sub,
-    email: payload.email,
-    name: payload.name ?? '',
-    picture: payload.picture ?? '',
-    created_at: now,
-    updated_at: now,
-  })
-
-  const sessionToken = createSessionToken()
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString()
-  await createSession({
-    token: sessionToken,
-    user_id: userId,
-    created_at: now,
-    expires_at: expiresAt,
-  })
-
-  response.json({
-    ok: true,
-    session: {
-      token: sessionToken,
-      expiresAt,
-    },
-    user: {
+    await upsertGoogleUser({
       id: userId,
+      google_sub: payload.sub,
       email: payload.email,
-      name: payload.name ?? payload.email,
+      name: payload.name ?? '',
       picture: payload.picture ?? '',
-    },
-  })
+      created_at: now,
+      updated_at: now,
+    })
+
+    const sessionToken = createSessionToken()
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString()
+    await createSession({
+      token: sessionToken,
+      user_id: userId,
+      created_at: now,
+      expires_at: expiresAt,
+    })
+
+    response.json({
+      ok: true,
+      session: {
+        token: sessionToken,
+        expiresAt,
+      },
+      user: {
+        id: userId,
+        email: payload.email,
+        name: payload.name ?? payload.email,
+        picture: payload.picture ?? '',
+      },
+    })
+  } catch (error) {
+    console.error('Google auth failed', error)
+    const message = error instanceof Error ? error.message : 'No se pudo iniciar sesion.'
+    response.status(500).json({
+      ok: false,
+      message: `Fallo autenticacion Google: ${message}`,
+    })
+  }
 })
 
 app.get('/api/auth/me', async (request, response) => {
