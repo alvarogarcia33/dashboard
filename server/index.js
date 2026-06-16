@@ -2,8 +2,8 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import express from 'express'
 import { OAuth2Client } from 'google-auth-library'
+import { createClient } from '@supabase/supabase-js'
 import crypto from 'node:crypto'
-import { DatabaseSync } from 'node:sqlite'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -21,18 +21,25 @@ const allowedOrigin = process.env.CLIENT_ORIGIN ?? 'http://127.0.0.1:5173'
 const googleClientId = process.env.GOOGLE_CLIENT_ID ?? process.env.VITE_GOOGLE_CLIENT_ID
 const openaiModel = process.env.OPENAI_MODEL ?? 'gpt-5.5'
 const authClient = new OAuth2Client(googleClientId)
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const supabase = supabaseUrl && supabaseServiceRoleKey ? createClient(supabaseUrl, supabaseServiceRoleKey) : null
 
 const app = express()
 let database
 
 app.use(
   cors({
-    origin: allowedOrigin,
+    origin: process.env.VERCEL ? true : allowedOrigin,
   }),
 )
 app.use(express.json({ limit: '1mb' }))
 
 async function initializeDatabase() {
+  if (supabase) return
+  if (process.env.VERCEL) return
+
+  const { DatabaseSync } = await import('node:sqlite')
   await mkdir(path.dirname(databasePath), { recursive: true })
   database = new DatabaseSync(databasePath)
   database.exec(`
@@ -65,10 +72,162 @@ async function initializeDatabase() {
 
 function getDatabase() {
   if (!database) {
-    throw new Error('La base de datos no esta inicializada.')
+    throw new Error(
+      process.env.VERCEL
+        ? 'Supabase no esta configurado. Define SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY.'
+        : 'La base de datos no esta inicializada.',
+    )
   }
 
   return database
+}
+
+function getStorageMode() {
+  if (process.env.VERCEL && !supabase) return 'unconfigured'
+  return supabase ? 'supabase' : 'sqlite'
+}
+
+async function getSessionUser(request) {
+  const token = getBearerToken(request)
+  if (!token) return null
+
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('sessions')
+      .select('user_id, expires_at, users(id, email, name, picture)')
+      .eq('token', token)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle()
+
+    if (error || !data?.users) return null
+
+    return {
+      id: data.users.id,
+      email: data.users.email,
+      name: data.users.name,
+      picture: data.users.picture,
+    }
+  }
+
+  const record = getDatabase()
+    .prepare(
+      `
+      SELECT users.id, users.email, users.name, users.picture
+      FROM sessions
+      JOIN users ON users.id = sessions.user_id
+      WHERE sessions.token = ? AND sessions.expires_at > ?
+    `,
+    )
+    .get(token, new Date().toISOString())
+
+  return record ?? null
+}
+
+async function findUserIdByGoogleSub(googleSub) {
+  if (supabase) {
+    const { data, error } = await supabase.from('users').select('id').eq('google_sub', googleSub).maybeSingle()
+    if (error) throw error
+    return data?.id ?? null
+  }
+
+  return getDatabase().prepare('SELECT id FROM users WHERE google_sub = ?').get(googleSub)?.id ?? null
+}
+
+async function upsertGoogleUser(user) {
+  if (supabase) {
+    const { error } = await supabase.from('users').upsert(user, { onConflict: 'google_sub' })
+    if (error) throw error
+    return
+  }
+
+  getDatabase()
+    .prepare(
+      `
+      INSERT INTO users (id, google_sub, email, name, picture, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(google_sub) DO UPDATE SET
+        email = excluded.email,
+        name = excluded.name,
+        picture = excluded.picture,
+        updated_at = excluded.updated_at;
+    `,
+    )
+    .run(user.id, user.google_sub, user.email, user.name ?? '', user.picture ?? '', user.created_at, user.updated_at)
+}
+
+async function createSession(session) {
+  if (supabase) {
+    const { error } = await supabase.from('sessions').insert(session)
+    if (error) throw error
+    return
+  }
+
+  getDatabase()
+    .prepare('INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
+    .run(session.token, session.user_id, session.created_at, session.expires_at)
+}
+
+async function deleteSession(token) {
+  if (!token) return
+
+  if (supabase) {
+    const { error } = await supabase.from('sessions').delete().eq('token', token)
+    if (error) throw error
+    return
+  }
+
+  getDatabase().prepare('DELETE FROM sessions WHERE token = ?').run(token)
+}
+
+async function getDashboardSnapshot(userId) {
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('dashboard_snapshots')
+      .select('snapshot_json, updated_at')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (error) throw error
+    return data
+  }
+
+  return getDatabase().prepare('SELECT snapshot_json, updated_at FROM dashboard_snapshots WHERE user_id = ?').get(userId)
+}
+
+async function upsertDashboardSnapshot(userId, snapshot, updatedAt) {
+  if (supabase) {
+    const { error } = await supabase.from('dashboard_snapshots').upsert(
+      {
+        user_id: userId,
+        snapshot_json: snapshot,
+        updated_at: updatedAt,
+      },
+      { onConflict: 'user_id' },
+    )
+    if (error) throw error
+    return
+  }
+
+  getDatabase()
+    .prepare(`
+      INSERT INTO dashboard_snapshots (user_id, snapshot_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        snapshot_json = excluded.snapshot_json,
+        updated_at = excluded.updated_at;
+    `)
+    .run(userId, JSON.stringify(snapshot), updatedAt, updatedAt)
+}
+
+async function deleteDashboardSnapshot(userId) {
+  if (supabase) {
+    const { error } = await supabase.from('dashboard_snapshots').delete().eq('user_id', userId)
+    if (error) throw error
+    return true
+  }
+
+  const result = getDatabase().prepare('DELETE FROM dashboard_snapshots WHERE user_id = ?').run(userId)
+  return result.changes > 0
 }
 
 function sanitizeUserId(userId) {
@@ -85,27 +244,9 @@ function getBearerToken(request) {
   return header.slice('Bearer '.length).trim()
 }
 
-function getSessionUser(request) {
-  const token = getBearerToken(request)
-  if (!token) return null
-
-  const record = getDatabase()
-    .prepare(
-      `
-      SELECT users.id, users.email, users.name, users.picture
-      FROM sessions
-      JOIN users ON users.id = sessions.user_id
-      WHERE sessions.token = ? AND sessions.expires_at > ?
-    `,
-    )
-    .get(token, new Date().toISOString())
-
-  return record ?? null
-}
-
-function authorizeDashboardRequest(request, response) {
+async function authorizeDashboardRequest(request, response) {
   const requestedUserId = sanitizeUserId(request.params.userId)
-  const sessionUser = getSessionUser(request)
+  const sessionUser = await getSessionUser(request)
 
   if (!sessionUser && requestedUserId === 'demo') {
     return { id: 'demo', email: null, name: 'Demo', picture: null }
@@ -206,7 +347,7 @@ app.get('/api/health', (_request, response) => {
   response.json({
     ok: true,
     service: 'nexus-dashboard-api',
-    database: 'sqlite',
+    database: getStorageMode(),
     time: new Date().toISOString(),
   })
 })
@@ -235,28 +376,27 @@ app.post('/api/auth/google', async (request, response) => {
   }
 
   const now = new Date().toISOString()
-  const existingUser = getDatabase().prepare('SELECT id FROM users WHERE google_sub = ?').get(payload.sub)
-  const userId = existingUser?.id ?? `google_${payload.sub}`
+  const existingUserId = await findUserIdByGoogleSub(payload.sub)
+  const userId = existingUserId ?? `google_${payload.sub}`
 
-  getDatabase()
-    .prepare(
-      `
-      INSERT INTO users (id, google_sub, email, name, picture, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(google_sub) DO UPDATE SET
-        email = excluded.email,
-        name = excluded.name,
-        picture = excluded.picture,
-        updated_at = excluded.updated_at;
-    `,
-    )
-    .run(userId, payload.sub, payload.email, payload.name ?? '', payload.picture ?? '', now, now)
+  await upsertGoogleUser({
+    id: userId,
+    google_sub: payload.sub,
+    email: payload.email,
+    name: payload.name ?? '',
+    picture: payload.picture ?? '',
+    created_at: now,
+    updated_at: now,
+  })
 
   const sessionToken = createSessionToken()
   const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString()
-  getDatabase()
-    .prepare('INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
-    .run(sessionToken, userId, now, expiresAt)
+  await createSession({
+    token: sessionToken,
+    user_id: userId,
+    created_at: now,
+    expires_at: expiresAt,
+  })
 
   response.json({
     ok: true,
@@ -273,8 +413,8 @@ app.post('/api/auth/google', async (request, response) => {
   })
 })
 
-app.get('/api/auth/me', (request, response) => {
-  const user = getSessionUser(request)
+app.get('/api/auth/me', async (request, response) => {
+  const user = await getSessionUser(request)
 
   if (!user) {
     response.status(401).json({ ok: false, message: 'No autenticado.' })
@@ -284,22 +424,18 @@ app.get('/api/auth/me', (request, response) => {
   response.json({ ok: true, user })
 })
 
-app.post('/api/auth/logout', (request, response) => {
+app.post('/api/auth/logout', async (request, response) => {
   const token = getBearerToken(request)
-  if (token) {
-    getDatabase().prepare('DELETE FROM sessions WHERE token = ?').run(token)
-  }
+  await deleteSession(token)
 
   response.json({ ok: true })
 })
 
 app.get('/api/dashboard/:userId', async (request, response) => {
-  const user = authorizeDashboardRequest(request, response)
+  const user = await authorizeDashboardRequest(request, response)
   if (!user) return
   const userId = user.id
-  const record = getDatabase()
-    .prepare('SELECT snapshot_json, updated_at FROM dashboard_snapshots WHERE user_id = ?')
-    .get(userId)
+  const record = await getDashboardSnapshot(userId)
 
   if (!record) {
     response.json({
@@ -314,26 +450,18 @@ app.get('/api/dashboard/:userId', async (request, response) => {
     exists: true,
     userId,
     updatedAt: record.updated_at,
-    snapshot: JSON.parse(record.snapshot_json),
+    snapshot: typeof record.snapshot_json === 'string' ? JSON.parse(record.snapshot_json) : record.snapshot_json,
   })
 })
 
 app.put('/api/dashboard/:userId', async (request, response) => {
-  const user = authorizeDashboardRequest(request, response)
+  const user = await authorizeDashboardRequest(request, response)
   if (!user) return
   const userId = user.id
   const snapshot = normalizeSnapshot(request.body?.snapshot)
   const updatedAt = new Date().toISOString()
 
-  getDatabase()
-    .prepare(`
-      INSERT INTO dashboard_snapshots (user_id, snapshot_json, created_at, updated_at)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(user_id) DO UPDATE SET
-        snapshot_json = excluded.snapshot_json,
-        updated_at = excluded.updated_at;
-    `)
-    .run(userId, JSON.stringify(snapshot), updatedAt, updatedAt)
+  await upsertDashboardSnapshot(userId, snapshot, updatedAt)
 
   response.json({
     ok: true,
@@ -343,15 +471,15 @@ app.put('/api/dashboard/:userId', async (request, response) => {
 })
 
 app.delete('/api/dashboard/:userId', async (request, response) => {
-  const user = authorizeDashboardRequest(request, response)
+  const user = await authorizeDashboardRequest(request, response)
   if (!user) return
   const userId = user.id
-  const result = getDatabase().prepare('DELETE FROM dashboard_snapshots WHERE user_id = ?').run(userId)
+  const deleted = await deleteDashboardSnapshot(userId)
 
   response.json({
     ok: true,
     userId,
-    deleted: result.changes > 0,
+    deleted,
   })
 })
 
@@ -617,7 +745,14 @@ app.use((error, _request, response, _next) => {
 
 await initializeDatabase()
 
-app.listen(port, () => {
-  console.log(`Nexus Dashboard API running on http://127.0.0.1:${port}`)
-  console.log(`SQLite database: ${databasePath}`)
-})
+if (!process.env.VERCEL) {
+  app.listen(port, () => {
+    console.log(`Nexus Dashboard API running on http://127.0.0.1:${port}`)
+    console.log(`Storage: ${getStorageMode()}`)
+    if (!supabase) {
+      console.log(`SQLite database: ${databasePath}`)
+    }
+  })
+}
+
+export default app

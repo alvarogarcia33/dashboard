@@ -22,6 +22,50 @@ Por defecto:
 - Frontend: `http://127.0.0.1:5173`
 - Backend API: `http://127.0.0.1:8787`
 
+## Deploy gratis con Vercel + Supabase
+
+La app esta preparada para correr en Vercel Free usando Supabase Free como base de datos. En local usa SQLite; en Vercel usa Supabase cuando existen `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`.
+
+### 1. Crear base en Supabase
+
+1. Crear un proyecto en Supabase.
+2. Abrir **SQL Editor**.
+3. Ejecutar el contenido de `supabase/schema.sql`.
+4. Copiar:
+   - `Project URL` como `SUPABASE_URL`.
+   - `service_role key` como `SUPABASE_SERVICE_ROLE_KEY`.
+
+La `service_role key` nunca debe ir al frontend ni tener prefijo `VITE_`.
+
+### 2. Crear proyecto en Vercel
+
+1. Importar el repo `alvarogarcia33/dashboard`.
+2. Framework: **Vite**.
+3. Build command: `npm run build`.
+4. Output directory: `dist`.
+5. Root directory: vacio.
+
+Variables de entorno en Vercel:
+
+```bash
+VITE_GOOGLE_CLIENT_ID=...
+VITE_DEMO_USER_ID=demo
+GOOGLE_CLIENT_ID=...
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-5.5
+SUPABASE_URL=...
+SUPABASE_SERVICE_ROLE_KEY=...
+```
+
+No configures `VITE_API_BASE_URL` en Vercel salvo que separes frontend y backend. Si queda vacia, el frontend llama a `/api` en el mismo dominio.
+
+### 3. Google OAuth
+
+Cuando Vercel genere la URL publica, agregarla en Google Cloud:
+
+- Authorized JavaScript origins: `https://tu-app.vercel.app`
+- Authorized redirect URIs: no hace falta para el flujo actual de Google Identity Services.
+
 ## Que incluye el MVP
 
 - Reuniones del dia con bloques por tipo.

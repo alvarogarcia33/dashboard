@@ -199,7 +199,7 @@ const calendarScope = 'https://www.googleapis.com/auth/calendar.readonly'
 const tasksScope = 'https://www.googleapis.com/auth/tasks.readonly'
 const googleWorkspaceScope = `${calendarScope} ${tasksScope}`
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8787'
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ''
 const apiUserId = (import.meta.env.VITE_DEMO_USER_ID as string | undefined) ?? 'demo'
 const defaultDashboardPreferences: DashboardPreferences = {
   metrics: true,
