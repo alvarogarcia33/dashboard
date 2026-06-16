@@ -19,10 +19,23 @@ const allowedOrigin = process.env.CLIENT_ORIGIN ?? 'http://127.0.0.1:5173'
 const googleClientId = process.env.GOOGLE_CLIENT_ID ?? process.env.VITE_GOOGLE_CLIENT_ID
 const openaiModel = process.env.OPENAI_MODEL ?? 'gpt-5.5'
 const authClient = new OAuth2Client(googleClientId)
-const supabaseUrl = process.env.SUPABASE_URL
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const supabase = supabaseUrl && supabaseServiceRoleKey ? createClient(supabaseUrl, supabaseServiceRoleKey) : null
+const supabaseUrl = process.env.SUPABASE_URL?.trim()
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
 const isVercel = Boolean(process.env.VERCEL)
+let supabaseInitializationError = ''
+
+function initializeSupabaseClient() {
+  if (!supabaseUrl || !supabaseServiceRoleKey) return null
+
+  try {
+    return createClient(supabaseUrl, supabaseServiceRoleKey)
+  } catch (error) {
+    supabaseInitializationError = error instanceof Error ? error.message : 'No se pudo inicializar Supabase.'
+    return null
+  }
+}
+
+const supabase = initializeSupabaseClient()
 
 const app = express()
 let database
@@ -62,11 +75,13 @@ async function initializeDatabase() {
 }
 
 function getDatabase() {
+  if (isVercel && !supabase) {
+    throw new Error(getStorageMessage())
+  }
+
   if (!database) {
     throw new Error(
-      process.env.VERCEL
-        ? 'Supabase no esta configurado. Define SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY.'
-        : 'La base de datos no esta inicializada.',
+      isVercel ? 'Supabase no esta configurado. Define SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY.' : 'La base de datos no esta inicializada.',
     )
   }
 
@@ -76,6 +91,13 @@ function getDatabase() {
 function getStorageMode() {
   if (isVercel && !supabase) return 'unconfigured'
   return supabase ? 'supabase' : 'json'
+}
+
+function getStorageMessage() {
+  if (supabase) return 'Supabase configurado.'
+  if (supabaseInitializationError) return supabaseInitializationError
+  if (isVercel) return 'Faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY.'
+  return 'Storage JSON local.'
 }
 
 async function getSessionUser(request) {
@@ -326,6 +348,7 @@ app.get('/api/health', (_request, response) => {
     ok: true,
     service: 'nexus-dashboard-api',
     database: getStorageMode(),
+    storageMessage: getStorageMessage(),
     time: new Date().toISOString(),
   })
 })
