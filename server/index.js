@@ -24,20 +24,21 @@ const authClient = new OAuth2Client(googleClientId)
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 const supabase = supabaseUrl && supabaseServiceRoleKey ? createClient(supabaseUrl, supabaseServiceRoleKey) : null
+const isVercel = Boolean(process.env.VERCEL)
 
 const app = express()
 let database
 
 app.use(
   cors({
-    origin: process.env.VERCEL ? true : allowedOrigin,
+    origin: isVercel ? true : allowedOrigin,
   }),
 )
 app.use(express.json({ limit: '1mb' }))
 
 async function initializeDatabase() {
   if (supabase) return
-  if (process.env.VERCEL) return
+  if (isVercel) return
 
   const { DatabaseSync } = await import('node:sqlite')
   await mkdir(path.dirname(databasePath), { recursive: true })
@@ -83,7 +84,7 @@ function getDatabase() {
 }
 
 function getStorageMode() {
-  if (process.env.VERCEL && !supabase) return 'unconfigured'
+  if (isVercel && !supabase) return 'unconfigured'
   return supabase ? 'supabase' : 'sqlite'
 }
 
@@ -743,9 +744,8 @@ app.use((error, _request, response, _next) => {
   })
 })
 
-await initializeDatabase()
-
-if (!process.env.VERCEL) {
+async function startLocalServer() {
+  await initializeDatabase()
   app.listen(port, () => {
     console.log(`Nexus Dashboard API running on http://127.0.0.1:${port}`)
     console.log(`Storage: ${getStorageMode()}`)
@@ -753,6 +753,10 @@ if (!process.env.VERCEL) {
       console.log(`SQLite database: ${databasePath}`)
     }
   })
+}
+
+if (!isVercel) {
+  await startLocalServer()
 }
 
 export default app
