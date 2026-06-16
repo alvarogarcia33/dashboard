@@ -13,9 +13,7 @@ dotenv.config()
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const dataDir = path.join(__dirname, 'data')
-const databasePath = process.env.DATABASE_PATH
-  ? path.resolve(process.env.DATABASE_PATH)
-  : path.join(dataDir, 'dashboard.sqlite')
+const databasePath = process.env.DATABASE_PATH ? path.resolve(process.env.DATABASE_PATH) : path.join(dataDir, 'dashboard.json')
 const port = Number(process.env.API_PORT ?? 8787)
 const allowedOrigin = process.env.CLIENT_ORIGIN ?? 'http://127.0.0.1:5173'
 const googleClientId = process.env.GOOGLE_CLIENT_ID ?? process.env.VITE_GOOGLE_CLIENT_ID
@@ -40,35 +38,27 @@ async function initializeDatabase() {
   if (supabase) return
   if (isVercel) return
 
-  const { DatabaseSync } = await import('node:sqlite')
   await mkdir(path.dirname(databasePath), { recursive: true })
-  database = new DatabaseSync(databasePath)
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS dashboard_snapshots (
-      user_id TEXT PRIMARY KEY,
-      snapshot_json TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
+  const { readFile, writeFile } = await import('node:fs/promises')
 
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      google_sub TEXT UNIQUE NOT NULL,
-      email TEXT NOT NULL,
-      name TEXT,
-      picture TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
+  async function readStore() {
+    try {
+      return JSON.parse(await readFile(databasePath, 'utf8'))
+    } catch {
+      return {
+        dashboard_snapshots: {},
+        users: {},
+        users_by_google_sub: {},
+        sessions: {},
+      }
+    }
+  }
 
-    CREATE TABLE IF NOT EXISTS sessions (
-      token TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      expires_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-  `)
+  async function writeStore(store) {
+    await writeFile(databasePath, JSON.stringify(store, null, 2))
+  }
+
+  database = { readStore, writeStore }
 }
 
 function getDatabase() {
@@ -85,7 +75,7 @@ function getDatabase() {
 
 function getStorageMode() {
   if (isVercel && !supabase) return 'unconfigured'
-  return supabase ? 'supabase' : 'sqlite'
+  return supabase ? 'supabase' : 'json'
 }
 
 async function getSessionUser(request) {
@@ -110,18 +100,10 @@ async function getSessionUser(request) {
     }
   }
 
-  const record = getDatabase()
-    .prepare(
-      `
-      SELECT users.id, users.email, users.name, users.picture
-      FROM sessions
-      JOIN users ON users.id = sessions.user_id
-      WHERE sessions.token = ? AND sessions.expires_at > ?
-    `,
-    )
-    .get(token, new Date().toISOString())
-
-  return record ?? null
+  const store = await getDatabase().readStore()
+  const session = store.sessions[token]
+  if (!session || session.expires_at <= new Date().toISOString()) return null
+  return store.users[session.user_id] ?? null
 }
 
 async function findUserIdByGoogleSub(googleSub) {
@@ -131,7 +113,8 @@ async function findUserIdByGoogleSub(googleSub) {
     return data?.id ?? null
   }
 
-  return getDatabase().prepare('SELECT id FROM users WHERE google_sub = ?').get(googleSub)?.id ?? null
+  const store = await getDatabase().readStore()
+  return store.users_by_google_sub[googleSub] ?? null
 }
 
 async function upsertGoogleUser(user) {
@@ -141,19 +124,10 @@ async function upsertGoogleUser(user) {
     return
   }
 
-  getDatabase()
-    .prepare(
-      `
-      INSERT INTO users (id, google_sub, email, name, picture, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(google_sub) DO UPDATE SET
-        email = excluded.email,
-        name = excluded.name,
-        picture = excluded.picture,
-        updated_at = excluded.updated_at;
-    `,
-    )
-    .run(user.id, user.google_sub, user.email, user.name ?? '', user.picture ?? '', user.created_at, user.updated_at)
+  const store = await getDatabase().readStore()
+  store.users[user.id] = user
+  store.users_by_google_sub[user.google_sub] = user.id
+  await getDatabase().writeStore(store)
 }
 
 async function createSession(session) {
@@ -163,9 +137,9 @@ async function createSession(session) {
     return
   }
 
-  getDatabase()
-    .prepare('INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
-    .run(session.token, session.user_id, session.created_at, session.expires_at)
+  const store = await getDatabase().readStore()
+  store.sessions[session.token] = session
+  await getDatabase().writeStore(store)
 }
 
 async function deleteSession(token) {
@@ -177,7 +151,9 @@ async function deleteSession(token) {
     return
   }
 
-  getDatabase().prepare('DELETE FROM sessions WHERE token = ?').run(token)
+  const store = await getDatabase().readStore()
+  delete store.sessions[token]
+  await getDatabase().writeStore(store)
 }
 
 async function getDashboardSnapshot(userId) {
@@ -192,7 +168,8 @@ async function getDashboardSnapshot(userId) {
     return data
   }
 
-  return getDatabase().prepare('SELECT snapshot_json, updated_at FROM dashboard_snapshots WHERE user_id = ?').get(userId)
+  const store = await getDatabase().readStore()
+  return store.dashboard_snapshots[userId] ?? null
 }
 
 async function upsertDashboardSnapshot(userId, snapshot, updatedAt) {
@@ -209,15 +186,12 @@ async function upsertDashboardSnapshot(userId, snapshot, updatedAt) {
     return
   }
 
-  getDatabase()
-    .prepare(`
-      INSERT INTO dashboard_snapshots (user_id, snapshot_json, created_at, updated_at)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(user_id) DO UPDATE SET
-        snapshot_json = excluded.snapshot_json,
-        updated_at = excluded.updated_at;
-    `)
-    .run(userId, JSON.stringify(snapshot), updatedAt, updatedAt)
+  const store = await getDatabase().readStore()
+  store.dashboard_snapshots[userId] = {
+    snapshot_json: snapshot,
+    updated_at: updatedAt,
+  }
+  await getDatabase().writeStore(store)
 }
 
 async function deleteDashboardSnapshot(userId) {
@@ -227,8 +201,11 @@ async function deleteDashboardSnapshot(userId) {
     return true
   }
 
-  const result = getDatabase().prepare('DELETE FROM dashboard_snapshots WHERE user_id = ?').run(userId)
-  return result.changes > 0
+  const store = await getDatabase().readStore()
+  const deleted = Boolean(store.dashboard_snapshots[userId])
+  delete store.dashboard_snapshots[userId]
+  await getDatabase().writeStore(store)
+  return deleted
 }
 
 function sanitizeUserId(userId) {
@@ -750,7 +727,7 @@ async function startLocalServer() {
     console.log(`Nexus Dashboard API running on http://127.0.0.1:${port}`)
     console.log(`Storage: ${getStorageMode()}`)
     if (!supabase) {
-      console.log(`SQLite database: ${databasePath}`)
+      console.log(`Local JSON database: ${databasePath}`)
     }
   })
 }
