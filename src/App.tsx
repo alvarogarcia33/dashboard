@@ -1050,13 +1050,29 @@ function App() {
     try {
       setIsCalendarSyncing(true)
       setSyncMessage('Sincronizando Google Calendar y Tasks...')
-      const timeMin = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0).toISOString()
-      const timeMax = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7, 23, 59).toISOString()
+      const visibleWeekStart = startOfWeek(today, { weekStartsOn: 1 })
+      const timeMin = new Date(
+        visibleWeekStart.getFullYear(),
+        visibleWeekStart.getMonth(),
+        visibleWeekStart.getDate(),
+        0,
+        0,
+      ).toISOString()
+      const timeMax = new Date(
+        visibleWeekStart.getFullYear(),
+        visibleWeekStart.getMonth(),
+        visibleWeekStart.getDate() + 6,
+        23,
+        59,
+      ).toISOString()
       const params = new URLSearchParams({
+        maxResults: '2500',
+        showDeleted: 'false',
         singleEvents: 'true',
         orderBy: 'startTime',
         timeMin,
         timeMax,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       })
       const calendarListResponse = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader', {
         headers: { Authorization: `Bearer ${token}` },
@@ -1083,39 +1099,58 @@ function App() {
       const visibleCalendars = (calendarListPayload.items ?? []).filter((calendar) => calendar.id && calendar.selected !== false)
       const calendarsToSync = visibleCalendars.length ? visibleCalendars : [{ id: 'primary', summary: 'Principal', primary: true }]
 
-      const eventGroups = await Promise.all(
+      const calendarResults = await Promise.all(
         calendarsToSync.map(async (calendar) => {
-          const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?${params}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          })
+          try {
+            const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?${params}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
 
-          if (!response.ok) {
-            throw new Error(`No se pudo leer el calendario ${calendar.summary ?? calendar.id}`)
+            if (!response.ok) {
+              return {
+                calendar,
+                events: [] as Meeting[],
+                error: `No se pudo leer ${calendar.summary ?? calendar.id}`,
+              }
+            }
+
+            const payload = (await response.json()) as {
+              items?: Array<{
+                id: string
+                summary?: string
+                start?: { dateTime?: string; date?: string }
+                end?: { dateTime?: string; date?: string }
+              }>
+            }
+
+            return {
+              calendar,
+              events: (payload.items ?? [])
+                .filter((event) => event.start?.dateTime && event.end?.dateTime)
+                .map((event) => ({
+                  id: `google-${calendar.id}-${event.id}`,
+                  title: event.summary ?? 'Evento sin titulo',
+                  startsAt: event.start?.dateTime ?? '',
+                  endsAt: event.end?.dateTime ?? '',
+                  source: 'google' as const,
+                  focus: 'sync' as const,
+                })),
+              error: '',
+            }
+          } catch {
+            return {
+              calendar,
+              events: [] as Meeting[],
+              error: `No se pudo leer ${calendar.summary ?? calendar.id}`,
+            }
           }
-
-          const payload = (await response.json()) as {
-            items?: Array<{
-              id: string
-              summary?: string
-              start?: { dateTime?: string; date?: string }
-              end?: { dateTime?: string; date?: string }
-            }>
-          }
-
-          return (payload.items ?? [])
-            .filter((event) => event.start?.dateTime && event.end?.dateTime)
-            .map((event) => ({
-              id: `google-${calendar.id}-${event.id}`,
-              title: event.summary ?? 'Evento sin titulo',
-              startsAt: event.start?.dateTime ?? '',
-              endsAt: event.end?.dateTime ?? '',
-              source: 'google' as const,
-              focus: 'sync' as const,
-            }))
         }),
       )
 
-      const googleMeetings: Meeting[] = eventGroups.flat().sort((a, b) => parseISO(a.startsAt).getTime() - parseISO(b.startsAt).getTime())
+      const googleMeetings: Meeting[] = calendarResults
+        .flatMap((result) => result.events)
+        .sort((a, b) => parseISO(a.startsAt).getTime() - parseISO(b.startsAt).getTime())
+      const failedCalendars = calendarResults.filter((result) => result.error)
 
       const importedTasks = await fetchGoogleTasks(token)
 
@@ -1124,7 +1159,9 @@ function App() {
       setSyncMessage(
         `${googleMeetings.length} eventos importados desde ${calendarsToSync.length} calendario${
           calendarsToSync.length === 1 ? '' : 's'
-        } y ${importedTasks.length} tareas desde Google`,
+        } y ${importedTasks.length} tareas desde Google${
+          failedCalendars.length ? `. No se pudieron leer: ${failedCalendars.map((result) => result.calendar.summary ?? result.calendar.id).join(', ')}` : ''
+        }`,
       )
       setIsCalendarConnected(true)
     } catch (error) {
