@@ -1058,45 +1058,74 @@ function App() {
         timeMin,
         timeMax,
       })
-      const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`, {
+      const calendarListResponse = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader', {
         headers: { Authorization: `Bearer ${token}` },
       })
 
-      if (!response.ok) {
-        if (response.status === 401) {
+      if (!calendarListResponse.ok) {
+        if (calendarListResponse.status === 401) {
           setCalendarAccessToken('')
           setIsCalendarConnected(false)
           setSyncMessage('La sesion de Google expiro. Conecta Google Calendar otra vez.')
           return
         }
-        throw new Error('Google Calendar rechazo la solicitud')
+        throw new Error('Google Calendar rechazo la lista de calendarios')
       }
 
-      const payload = (await response.json()) as {
+      const calendarListPayload = (await calendarListResponse.json()) as {
         items?: Array<{
           id: string
           summary?: string
-          start?: { dateTime?: string; date?: string }
-          end?: { dateTime?: string; date?: string }
+          selected?: boolean
+          primary?: boolean
         }>
       }
+      const visibleCalendars = (calendarListPayload.items ?? []).filter((calendar) => calendar.id && calendar.selected !== false)
+      const calendarsToSync = visibleCalendars.length ? visibleCalendars : [{ id: 'primary', summary: 'Principal', primary: true }]
 
-      const googleMeetings: Meeting[] = (payload.items ?? [])
-        .filter((event) => event.start?.dateTime && event.end?.dateTime)
-        .map((event) => ({
-          id: `google-${event.id}`,
-          title: event.summary ?? 'Evento sin titulo',
-          startsAt: event.start?.dateTime ?? '',
-          endsAt: event.end?.dateTime ?? '',
-          source: 'google',
-          focus: 'sync',
-        }))
+      const eventGroups = await Promise.all(
+        calendarsToSync.map(async (calendar) => {
+          const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?${params}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+
+          if (!response.ok) {
+            throw new Error(`No se pudo leer el calendario ${calendar.summary ?? calendar.id}`)
+          }
+
+          const payload = (await response.json()) as {
+            items?: Array<{
+              id: string
+              summary?: string
+              start?: { dateTime?: string; date?: string }
+              end?: { dateTime?: string; date?: string }
+            }>
+          }
+
+          return (payload.items ?? [])
+            .filter((event) => event.start?.dateTime && event.end?.dateTime)
+            .map((event) => ({
+              id: `google-${calendar.id}-${event.id}`,
+              title: event.summary ?? 'Evento sin titulo',
+              startsAt: event.start?.dateTime ?? '',
+              endsAt: event.end?.dateTime ?? '',
+              source: 'google' as const,
+              focus: 'sync' as const,
+            }))
+        }),
+      )
+
+      const googleMeetings: Meeting[] = eventGroups.flat().sort((a, b) => parseISO(a.startsAt).getTime() - parseISO(b.startsAt).getTime())
 
       const importedTasks = await fetchGoogleTasks(token)
 
       setMeetings((current) => [...current.filter((meeting) => meeting.source !== 'google'), ...googleMeetings])
       setGoogleTasks(importedTasks)
-      setSyncMessage(`${googleMeetings.length} eventos y ${importedTasks.length} tareas importadas desde Google`)
+      setSyncMessage(
+        `${googleMeetings.length} eventos importados desde ${calendarsToSync.length} calendario${
+          calendarsToSync.length === 1 ? '' : 's'
+        } y ${importedTasks.length} tareas desde Google`,
+      )
       setIsCalendarConnected(true)
     } catch (error) {
       setSyncMessage(error instanceof Error ? error.message : 'No se pudo sincronizar Google')
