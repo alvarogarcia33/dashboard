@@ -1,20 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
 import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
-import {
   Activity,
   Archive,
   Bot,
@@ -489,6 +475,7 @@ function App() {
   const [authUser, setAuthUser] = useStoredState<AuthUser | null>('nexus-auth-user', null)
   const [authSession, setAuthSession] = useStoredState<AuthSession | null>('nexus-auth-session', null)
   const [authMessage, setAuthMessage] = useState('Inicia sesion para guardar datos en tu cuenta.')
+  const [isAuthenticating, setIsAuthenticating] = useState(false)
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const googleTokenClientRef = useRef<GoogleTokenClient | null>(null)
   const googleSignInRef = useRef<HTMLDivElement | null>(null)
@@ -544,13 +531,21 @@ function App() {
         return
       }
 
+      let timeoutId: number | undefined
+
       try {
+        setIsAuthenticating(true)
         setAuthMessage('Verificando sesion con backend...')
+        const controller = new AbortController()
+        timeoutId = window.setTimeout(() => controller.abort(), 15000)
         const authResponse = await fetch(`${apiBaseUrl}/api/auth/google`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ credential: response.credential }),
+          signal: controller.signal,
         })
+        window.clearTimeout(timeoutId)
+        timeoutId = undefined
         const payload = (await authResponse.json()) as { user?: AuthUser; session?: AuthSession; message?: string }
         if (!authResponse.ok || !payload.user || !payload.session) {
           throw new Error(payload.message ?? 'No se pudo iniciar sesion.')
@@ -560,7 +555,16 @@ function App() {
         setAuthMessage(`Sesion iniciada: ${payload.user.email}`)
         setBackendMessage('Ahora puedes guardar datos en tu cuenta.')
       } catch (error) {
-        setAuthMessage(error instanceof Error ? error.message : 'No se pudo iniciar sesion.')
+        if (error instanceof Error && error.name === 'AbortError') {
+          setAuthMessage('Google tardo demasiado en responder. Intenta iniciar sesion otra vez.')
+        } else {
+          setAuthMessage(error instanceof Error ? error.message : 'No se pudo iniciar sesion.')
+        }
+      } finally {
+        if (timeoutId !== undefined) {
+          window.clearTimeout(timeoutId)
+        }
+        setIsAuthenticating(false)
       }
     },
     [setAuthSession, setAuthUser],
@@ -780,7 +784,6 @@ function App() {
   const projectChart = activeProjects.map((project) => ({
     name: project.name,
     progress: project.progress,
-    remaining: 100 - project.progress,
   }))
 
   const projectDistribution = [
@@ -1463,6 +1466,8 @@ function App() {
                 <span>{authUser.email}</span>
               </div>
             </div>
+          ) : isAuthenticating ? (
+            <div className="auth-loading">Verificando con Google...</div>
           ) : (
             <div ref={googleSignInRef} className="google-signin-slot" />
           )}
@@ -1697,15 +1702,14 @@ function App() {
               </div>
             </div>
             <div className="chart-box">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={weekDays}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="label" tickLine={false} axisLine={false} />
-                  <YAxis hide />
-                  <Tooltip />
-                  <Bar dataKey="hours" fill={selectedTheme.chart} radius={[5, 5, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="bar-chart-lite">
+                {weekDays.map((day) => (
+                  <div className="bar-chart-column" key={day.date}>
+                    <span style={{ height: `${Math.max(8, Math.min(100, day.hours * 18))}%`, background: selectedTheme.chart }} />
+                    <small>{day.label}</small>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="week-strip">
               {weekDays.map((day) => (
@@ -1761,21 +1765,14 @@ function App() {
               </div>
             </div>
             <div className="chart-box">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={recentSleepLogs}>
-                  <defs>
-                    <linearGradient id="sleep" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="5%" stopColor={selectedTheme.secondaryChart} stopOpacity={0.32} />
-                      <stop offset="95%" stopColor={selectedTheme.secondaryChart} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="date" tickFormatter={(date) => format(parseISO(date), 'dd/MM')} tickLine={false} axisLine={false} />
-                  <YAxis domain={[4, 10]} tickLine={false} axisLine={false} />
-                  <Tooltip />
-                  <Area dataKey="hours" stroke={selectedTheme.secondaryChart} fill="url(#sleep)" strokeWidth={3} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <div className="sleep-chart-lite">
+                {recentSleepLogs.map((log) => (
+                  <div className="sleep-chart-column" key={log.date}>
+                    <span style={{ height: `${Math.max(12, Math.min(100, log.hours * 10))}%`, background: selectedTheme.secondaryChart }} />
+                    <small>{format(parseISO(log.date), 'dd/MM')}</small>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="sleep-entry-form">
               <label>
@@ -1931,16 +1928,17 @@ function App() {
               </div>
             </div>
             <div className="donut-wrap">
-              <ResponsiveContainer width="100%" height={210}>
-                <PieChart>
-                  <Pie innerRadius={62} outerRadius={92} paddingAngle={4} data={projectDistribution} dataKey="value">
-                    {projectDistribution.map((entry) => (
-                      <Cell key={entry.name} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+              <div className="status-stack">
+                {projectDistribution.map((entry) => (
+                  <span
+                    key={entry.name}
+                    style={{
+                      width: `${Math.max(8, (entry.value / Math.max(1, activeProjects.length)) * 100)}%`,
+                      background: entry.color,
+                    }}
+                  />
+                ))}
+              </div>
               <div className="legend">
                 {projectDistribution.map((entry) => (
                   <span key={entry.name}>
@@ -2143,16 +2141,17 @@ function App() {
           )}
 
           <div className="chart-box progress-chart">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={projectChart} layout="vertical" margin={{ left: 18 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" domain={[0, 100]} hide />
-                <YAxis dataKey="name" type="category" width={140} tickLine={false} axisLine={false} />
-                <Tooltip />
-                <Bar dataKey="progress" stackId="a" fill={selectedTheme.chart} radius={[5, 0, 0, 5]} />
-                <Bar dataKey="remaining" stackId="a" fill="var(--bar-muted)" radius={[0, 5, 5, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="progress-chart-lite">
+              {projectChart.map((project) => (
+                <div className="progress-chart-row" key={project.name}>
+                  <span>{project.name}</span>
+                  <div>
+                    <i style={{ width: `${project.progress}%`, background: selectedTheme.chart }} />
+                  </div>
+                  <strong>{project.progress}%</strong>
+                </div>
+              ))}
+            </div>
           </div>
           </section>
         )}
