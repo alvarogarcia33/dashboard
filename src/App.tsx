@@ -1678,17 +1678,24 @@ function App() {
             </div>
 
             <div className="timeline">
-              {todaysMeetings.map((meeting) => (
-                <div className={`timeline-item ${meeting.focus}`} key={meeting.id}>
-                  <time>
-                    {shortTime(meeting.startsAt)} - {shortTime(meeting.endsAt)}
-                  </time>
-                  <div>
-                    <strong>{meeting.title}</strong>
-                    <span>{focusLabels[meeting.focus]}</span>
+              {todaysMeetings.length ? (
+                todaysMeetings.map((meeting) => (
+                  <div className={`timeline-item ${meeting.focus}`} key={meeting.id}>
+                    <time>
+                      {shortTime(meeting.startsAt)} - {shortTime(meeting.endsAt)}
+                    </time>
+                    <div>
+                      <strong>{meeting.title}</strong>
+                      <span>{focusLabels[meeting.focus]}</span>
+                    </div>
                   </div>
+                ))
+              ) : (
+                <div className="empty-state compact">
+                  <strong>Dia libre de reuniones.</strong>
+                  <span>Sin eventos importados para hoy.</span>
                 </div>
-              ))}
+              )}
             </div>
               </article>
             )}
