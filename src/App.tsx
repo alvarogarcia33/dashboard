@@ -609,7 +609,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!googleClientId || !googleSignInRef.current || authUser) {
+    if (!googleClientId || !googleSignInRef.current || authUser || isAuthenticating) {
       return
     }
 
@@ -645,7 +645,7 @@ function App() {
     }, 300)
 
     return () => window.clearInterval(setupGoogleSignIn)
-  }, [authUser, handleGoogleCredential])
+  }, [authUser, handleGoogleCredential, isAuthenticating])
 
   useEffect(() => {
     if (!authSession?.token) {

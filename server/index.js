@@ -141,7 +141,7 @@ async function findUserIdByGoogleSub(googleSub) {
 
 async function upsertGoogleUser(user) {
   if (supabase) {
-    const { error } = await supabase.from('users').upsert(user, { onConflict: 'google_sub' })
+    const { error } = await supabase.from('users').upsert(user, { onConflict: 'id' })
     if (error) throw error
     return
   }
@@ -331,6 +331,12 @@ function parseOpenAIText(payload) {
   return typeof text === 'string' ? text : ''
 }
 
+function getErrorMessage(error) {
+  if (error instanceof Error) return error.message
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') return error.message
+  return 'No se pudo iniciar sesion.'
+}
+
 function normalizePlannerMessages(messages) {
   if (!Array.isArray(messages)) return []
 
@@ -366,10 +372,20 @@ app.post('/api/auth/google', async (request, response) => {
       return
     }
 
-    const ticket = await authClient.verifyIdToken({
-      idToken: credential,
-      audience: googleClientId,
-    })
+    let ticket
+    try {
+      ticket = await authClient.verifyIdToken({
+        idToken: credential,
+        audience: googleClientId,
+      })
+    } catch (error) {
+      const message = getErrorMessage(error)
+      response.status(401).json({
+        ok: false,
+        message: `Google rechazo la credencial: ${message}`,
+      })
+      return
+    }
     const payload = ticket.getPayload()
 
     if (!payload?.sub || !payload.email) {
@@ -415,7 +431,7 @@ app.post('/api/auth/google', async (request, response) => {
     })
   } catch (error) {
     console.error('Google auth failed', error)
-    const message = error instanceof Error ? error.message : 'No se pudo iniciar sesion.'
+    const message = getErrorMessage(error)
     response.status(500).json({
       ok: false,
       message: `Fallo autenticacion Google: ${message}`,
