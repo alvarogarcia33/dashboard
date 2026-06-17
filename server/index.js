@@ -98,6 +98,32 @@ function getStorageMessage() {
   return 'Storage JSON local.'
 }
 
+async function getStorageStatus() {
+  if (!supabase) {
+    return {
+      database: getStorageMode(),
+      storageMessage: getStorageMessage(),
+    }
+  }
+
+  const { error } = await supabase.from('users').select('id', { count: 'exact', head: true }).limit(1)
+
+  if (error) {
+    return {
+      database: 'supabase-error',
+      storageMessage:
+        error.message === 'Invalid API key'
+          ? 'Supabase rechazo SUPABASE_SERVICE_ROLE_KEY. Copia la service_role key del proyecto correcto.'
+          : `Supabase no respondio correctamente: ${error.message}`,
+    }
+  }
+
+  return {
+    database: 'supabase',
+    storageMessage: 'Supabase configurado y accesible.',
+  }
+}
+
 async function getSessionUser(request) {
   const token = getBearerToken(request)
   if (!token) return null
@@ -371,12 +397,13 @@ function normalizePlannerMessages(messages) {
     }))
 }
 
-app.get('/api/health', (_request, response) => {
+app.get('/api/health', async (_request, response) => {
+  const storageStatus = await getStorageStatus()
+
   response.json({
     ok: true,
     service: 'nexus-dashboard-api',
-    database: getStorageMode(),
-    storageMessage: getStorageMessage(),
+    ...storageStatus,
     time: new Date().toISOString(),
   })
 })
@@ -450,6 +477,14 @@ app.post('/api/auth/google', async (request, response) => {
   } catch (error) {
     console.error('Google auth failed', error)
     const message = getErrorMessage(error)
+    if (message === 'Invalid API key') {
+      response.status(500).json({
+        ok: false,
+        message: 'Supabase rechazo SUPABASE_SERVICE_ROLE_KEY. Revisa la key service_role del proyecto en Vercel.',
+      })
+      return
+    }
+
     response.status(500).json({
       ok: false,
       message: `Fallo autenticacion Google: ${message}`,
