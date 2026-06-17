@@ -51,6 +51,10 @@ Variables de entorno en Vercel:
 VITE_GOOGLE_CLIENT_ID=...
 VITE_DEMO_USER_ID=demo
 GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=https://tu-app.vercel.app/api/google/callback
+GOOGLE_TIME_ZONE=America/Montevideo
+SESSION_STATE_SECRET=...
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-5.5
 SUPABASE_URL=...
@@ -64,7 +68,7 @@ No configures `VITE_API_BASE_URL` en Vercel salvo que separes frontend y backend
 Cuando Vercel genere la URL publica, agregarla en Google Cloud:
 
 - Authorized JavaScript origins: `https://tu-app.vercel.app`
-- Authorized redirect URIs: no hace falta para el flujo actual de Google Identity Services.
+- Authorized redirect URIs: `https://tu-app.vercel.app/api/google/callback`
 
 ## Que incluye el MVP
 
@@ -76,10 +80,11 @@ Cuando Vercel genere la URL publica, agregarla en Google Cloud:
 - Selector de paleta visual con modo claro, azul, oscuro dorado y verde calma.
 - Dashboard configurable para mostrar u ocultar indicadores, agenda, sueno, proyectos y AI.
 - Persistencia local con `localStorage`, exportacion/importacion de backup, reset seguro y recuperacion ante datos corruptos.
-- Backend local con API y SQLite para guardar/cargar snapshots del dashboard por usuario demo.
+- Backend local con API y JSON local para desarrollo; en Vercel usa Supabase para usuarios, sesiones, snapshots y conexiones de Google.
 - Autenticacion con Sign in with Google, sesiones propias del backend y datos separados por usuario.
-- Sincronizacion real con Google Calendar usando OAuth y Google Identity Services.
-- Visualizacion de Google Tasks para tareas vencidas, de hoy o sin fecha.
+- Login obligatorio antes del dashboard con cuenta de Google.
+- Sincronizacion persistente de Google Calendar y Google Tasks desde el backend usando refresh token.
+- Visualizacion automatica de Google Tasks para tareas vencidas, de hoy o sin fecha.
 - Resumen diario con OpenAI desde el backend, sin exponer la API key en el frontend.
 - Asistente de planificacion con chat para preguntar por prioridades, proyectos y organizacion semanal.
 - Reporte semanal con OpenAI para cruzar reuniones, sueno, proyectos, victorias, riesgos y proximas acciones.
@@ -87,7 +92,7 @@ Cuando Vercel genere la URL publica, agregarla en Google Cloud:
 
 ## Backend local
 
-La API esta en `server/index.js` y usa SQLite local en `server/data/dashboard.sqlite`. Ese archivo esta ignorado por Git. Actualmente crea tablas para usuarios, sesiones y snapshots del dashboard.
+La API esta en `server/index.js`. En desarrollo usa JSON local en `server/data/dashboard.json`; en Vercel usa Supabase. Actualmente guarda usuarios, sesiones, snapshots del dashboard y conexiones OAuth de Google.
 
 Endpoints actuales:
 
@@ -95,6 +100,11 @@ Endpoints actuales:
 - `POST /api/auth/google`
 - `GET /api/auth/me`
 - `POST /api/auth/logout`
+- `GET /api/google/status`
+- `GET /api/google/connect-url`
+- `GET /api/google/callback`
+- `POST /api/google/sync`
+- `DELETE /api/google/connection`
 - `GET /api/dashboard/:userId`
 - `PUT /api/dashboard/:userId`
 - `DELETE /api/dashboard/:userId`
@@ -106,7 +116,7 @@ El frontend usa `VITE_API_BASE_URL` y `VITE_DEMO_USER_ID` para guardar o cargar 
 
 ## Autenticacion
 
-La app usa Sign in with Google. El frontend recibe el JWT `credential` y lo envia al backend, donde se valida con `google-auth-library` usando `GOOGLE_CLIENT_ID`. Si el token es valido, el backend crea/actualiza el usuario y devuelve una sesion propia.
+La app usa Sign in with Google. El frontend recibe el JWT `credential` y lo envia al backend, donde se valida contra Google usando `GOOGLE_CLIENT_ID`. Si el token es valido, el backend crea/actualiza el usuario y devuelve una sesion propia.
 
 Configurar ambas variables:
 
@@ -117,7 +127,7 @@ GOOGLE_CLIENT_ID=...
 
 ## Google Calendar y Google Tasks
 
-La pantalla lateral permite conectar Google con OAuth y traer eventos del calendario primario y tareas de Google Tasks. Configuracion local:
+El dashboard se abre solo despues del login. Desde la pantalla lateral se conecta Google Calendar + Tasks una sola vez. El backend guarda el refresh token y despues sincroniza automaticamente cada 5 minutos mientras el usuario usa el dashboard.
 
 1. Crear proyecto en Google Cloud.
 2. Habilitar Google Calendar API.
@@ -125,10 +135,14 @@ La pantalla lateral permite conectar Google con OAuth y traer eventos del calend
 4. Configurar OAuth consent screen.
 5. Crear OAuth Client ID para aplicacion web.
 6. Agregar `http://localhost:5173` como Authorized JavaScript origin.
-7. Copiar el Client ID en `.env` como `VITE_GOOGLE_CLIENT_ID`.
-8. Reiniciar `npm run dev`.
+7. Agregar `http://localhost:8787/api/google/callback` como Authorized redirect URI local.
+8. En produccion, agregar `https://tu-app.vercel.app` como Authorized JavaScript origin.
+9. En produccion, agregar `https://tu-app.vercel.app/api/google/callback` como Authorized redirect URI.
+10. Copiar el Client ID en `.env` como `VITE_GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_ID`.
+11. Copiar el Client Secret en `.env` como `GOOGLE_CLIENT_SECRET`.
+12. Reiniciar `npm run dev` y `npm run dev:api`.
 
-La app usa los scopes `https://www.googleapis.com/auth/calendar.readonly` y `https://www.googleapis.com/auth/tasks.readonly`. No guarda el access token en `localStorage`; queda solo en memoria durante la sesion.
+La app usa los scopes `https://www.googleapis.com/auth/calendar.readonly` y `https://www.googleapis.com/auth/tasks.readonly`. No guarda access tokens en `localStorage`; el backend refresca access tokens temporales usando el refresh token guardado para cada usuario.
 
 ## OpenAI
 

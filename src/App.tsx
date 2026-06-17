@@ -72,17 +72,6 @@ type SleepLog = {
 
 type ThemeId = 'light' | 'blue' | 'dark-gold' | 'calm'
 
-type GoogleTokenResponse = {
-  access_token?: string
-  error?: string
-  error_description?: string
-}
-
-type GoogleTokenClient = {
-  callback: (response: GoogleTokenResponse) => void
-  requestAccessToken: (options?: { prompt?: string }) => void
-}
-
 type GoogleCredentialResponse = {
   credential?: string
   select_by?: string
@@ -110,14 +99,6 @@ declare global {
             },
           ) => void
           disableAutoSelect: () => void
-        }
-        oauth2?: {
-          initTokenClient: (config: {
-            client_id: string
-            scope: string
-            callback: (response: GoogleTokenResponse) => void
-          }) => GoogleTokenClient
-          revoke: (token: string, done: () => void) => void
         }
       }
     }
@@ -181,9 +162,6 @@ type PlannerMessage = {
 
 const today = new Date()
 const backupVersion = 1
-const calendarScope = 'https://www.googleapis.com/auth/calendar.readonly'
-const tasksScope = 'https://www.googleapis.com/auth/tasks.readonly'
-const googleWorkspaceScope = `${calendarScope} ${tasksScope}`
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ''
 const apiUserId = (import.meta.env.VITE_DEMO_USER_ID as string | undefined) ?? 'demo'
@@ -447,12 +425,11 @@ function App() {
     defaultDashboardPreferences,
   )
   const [syncMessage, setSyncMessage] = useState(() =>
-    googleClientId ? 'Listo para conectar Google Calendar' : 'Configura VITE_GOOGLE_CLIENT_ID para activar Google Calendar.',
+    googleClientId ? 'Comprobando conexion con Google...' : 'Configura VITE_GOOGLE_CLIENT_ID para activar Google.',
   )
-  const [calendarAccessToken, setCalendarAccessToken] = useState('')
   const [isCalendarConnected, setIsCalendarConnected] = useState(false)
   const [isCalendarSyncing, setIsCalendarSyncing] = useState(false)
-  const [isTasksSyncing, setIsTasksSyncing] = useState(false)
+  const [lastGoogleSyncAt, setLastGoogleSyncAt] = useState('')
   const [storageMessage, setStorageMessage] = useState('Tus datos se guardan en este navegador')
   const [backendMessage, setBackendMessage] = useState('Comprobando backend...')
   const [isBackendOnline, setIsBackendOnline] = useState(false)
@@ -477,7 +454,6 @@ function App() {
   const [authMessage, setAuthMessage] = useState('Inicia sesion para guardar datos en tu cuenta.')
   const [isAuthenticating, setIsAuthenticating] = useState(false)
   const importInputRef = useRef<HTMLInputElement | null>(null)
-  const googleTokenClientRef = useRef<GoogleTokenClient | null>(null)
   const googleSignInRef = useRef<HTMLDivElement | null>(null)
   const [projectDraft, setProjectDraft] = useState({
     name: '',
@@ -569,44 +545,6 @@ function App() {
     },
     [setAuthSession, setAuthUser],
   )
-
-  useEffect(() => {
-    if (!googleClientId) {
-      return
-    }
-
-    let attempts = 0
-    const setupGoogleClient = window.setInterval(() => {
-      attempts += 1
-      const oauth = window.google?.accounts?.oauth2
-
-      if (oauth) {
-        googleTokenClientRef.current = oauth.initTokenClient({
-          client_id: googleClientId,
-          scope: googleWorkspaceScope,
-          callback: (response) => {
-            if (response.error || !response.access_token) {
-              setSyncMessage(response.error_description ?? response.error ?? 'No se pudo autorizar Google Calendar.')
-              setIsCalendarConnected(false)
-              return
-            }
-
-            setCalendarAccessToken(response.access_token)
-            setIsCalendarConnected(true)
-            setSyncMessage('Google Calendar conectado. Presiona Sincronizar para importar eventos.')
-          },
-        })
-        window.clearInterval(setupGoogleClient)
-      }
-
-      if (attempts > 30) {
-        window.clearInterval(setupGoogleClient)
-        setSyncMessage('No se pudo cargar Google Identity Services.')
-      }
-    }, 300)
-
-    return () => window.clearInterval(setupGoogleClient)
-  }, [])
 
   useEffect(() => {
     if (!googleClientId || !googleSignInRef.current || authUser || isAuthenticating) {
@@ -968,239 +906,139 @@ function App() {
     }
   }
 
-  function connectGoogleCalendar() {
-    if (!googleClientId) {
-      setSyncMessage('Falta VITE_GOOGLE_CLIENT_ID en el archivo .env.')
+  async function connectGoogleCalendar() {
+    if (!authSession?.token) {
+      setSyncMessage('Inicia sesion para conectar Google Calendar y Tasks.')
       return
     }
 
-    if (!googleTokenClientRef.current) {
-      setSyncMessage('Google Identity Services aun esta cargando. Intenta de nuevo en unos segundos.')
-      return
-    }
-
-    googleTokenClientRef.current.requestAccessToken({ prompt: calendarAccessToken ? '' : 'consent' })
-  }
-
-  async function fetchGoogleTasks(token: string) {
-    const listsResponse = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists?maxResults=100', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-
-    if (!listsResponse.ok) {
-      if (listsResponse.status === 401 || listsResponse.status === 403) {
-        throw new Error('Google Tasks necesita permiso. Conecta Google otra vez y habilita Google Tasks API.')
+    try {
+      setSyncMessage('Preparando conexion segura con Google...')
+      const response = await fetch(`${apiBaseUrl}/api/google/connect-url`, {
+        headers: getAuthHeaders(),
+      })
+      const payload = (await response.json()) as { ok?: boolean; url?: string; message?: string }
+      if (!response.ok || !payload.url) {
+        throw new Error(payload.message ?? 'No se pudo preparar la conexion con Google.')
       }
-      throw new Error('Google Tasks rechazo la solicitud.')
+      window.location.href = payload.url
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : 'No se pudo conectar Google.')
     }
-
-    const listsPayload = (await listsResponse.json()) as {
-      items?: Array<{ id: string; title?: string }>
-    }
-
-    const taskLists = listsPayload.items ?? []
-    const taskGroups = await Promise.all(
-      taskLists.map(async (list) => {
-        const params = new URLSearchParams({
-          showCompleted: 'false',
-          showHidden: 'false',
-          maxResults: '100',
-        })
-        const response = await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(list.id)}/tasks?${params}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-
-        if (!response.ok) {
-          throw new Error(`No se pudieron leer tareas de ${list.title ?? 'una lista'}.`)
-        }
-
-        const payload = (await response.json()) as {
-          items?: Array<{
-            id: string
-            title?: string
-            status?: 'needsAction' | 'completed'
-            due?: string
-            notes?: string
-            updated?: string
-          }>
-        }
-
-        return (payload.items ?? []).map((task) => ({
-          id: `google-task-${list.id}-${task.id}`,
-          title: task.title ?? 'Tarea sin titulo',
-          listId: list.id,
-          listTitle: list.title ?? 'Google Tasks',
-          status: task.status ?? 'needsAction',
-          due: task.due,
-          notes: task.notes,
-          updated: task.updated,
-        }))
-      }),
-    )
-
-    return taskGroups.flat()
   }
 
-  async function syncGoogleCalendar(token = calendarAccessToken) {
-    if (!token.trim()) {
-      connectGoogleCalendar()
-      return
-    }
+  const syncGoogleCalendar = useCallback(async () => {
+    if (!authSession?.token) return
 
     try {
       setIsCalendarSyncing(true)
-      setSyncMessage('Sincronizando Google Calendar y Tasks...')
-      const visibleWeekStart = startOfWeek(today, { weekStartsOn: 1 })
-      const timeMin = new Date(
-        visibleWeekStart.getFullYear(),
-        visibleWeekStart.getMonth(),
-        visibleWeekStart.getDate(),
-        0,
-        0,
-      ).toISOString()
-      const timeMax = new Date(
-        visibleWeekStart.getFullYear(),
-        visibleWeekStart.getMonth(),
-        visibleWeekStart.getDate() + 6,
-        23,
-        59,
-      ).toISOString()
-      const params = new URLSearchParams({
-        maxResults: '2500',
-        showDeleted: 'false',
-        singleEvents: 'true',
-        orderBy: 'startTime',
-        timeMin,
-        timeMax,
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      setSyncMessage('Actualizando Google Calendar y Tasks...')
+      const response = await fetch(`${apiBaseUrl}/api/google/sync`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
       })
-      const calendarListResponse = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-
-      if (!calendarListResponse.ok) {
-        if (calendarListResponse.status === 401) {
-          setCalendarAccessToken('')
-          setIsCalendarConnected(false)
-          setSyncMessage('La sesion de Google expiro. Conecta Google Calendar otra vez.')
-          return
-        }
-        throw new Error('Google Calendar rechazo la lista de calendarios')
+      const payload = (await response.json()) as {
+        ok?: boolean
+        connected?: boolean
+        meetings?: Meeting[]
+        googleTasks?: GoogleTask[]
+        message?: string
+        syncedAt?: string
+        failedCalendars?: string[]
       }
 
-      const calendarListPayload = (await calendarListResponse.json()) as {
-        items?: Array<{
-          id: string
-          summary?: string
-          selected?: boolean
-          primary?: boolean
-        }>
+      if (response.status === 409) {
+        setIsCalendarConnected(false)
+        setSyncMessage('Conecta Google una vez para activar sincronizacion automatica.')
+        return
       }
-      const visibleCalendars = (calendarListPayload.items ?? []).filter((calendar) => calendar.id && calendar.selected !== false)
-      const calendarsToSync = visibleCalendars.length ? visibleCalendars : [{ id: 'primary', summary: 'Principal', primary: true }]
 
-      const calendarResults = await Promise.all(
-        calendarsToSync.map(async (calendar) => {
-          try {
-            const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?${params}`, {
-              headers: { Authorization: `Bearer ${token}` },
-            })
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.message ?? 'No se pudo sincronizar Google.')
+      }
 
-            if (!response.ok) {
-              return {
-                calendar,
-                events: [] as Meeting[],
-                error: `No se pudo leer ${calendar.summary ?? calendar.id}`,
-              }
-            }
-
-            const payload = (await response.json()) as {
-              items?: Array<{
-                id: string
-                summary?: string
-                start?: { dateTime?: string; date?: string }
-                end?: { dateTime?: string; date?: string }
-              }>
-            }
-
-            return {
-              calendar,
-              events: (payload.items ?? [])
-                .filter((event) => event.start?.dateTime && event.end?.dateTime)
-                .map((event) => ({
-                  id: `google-${calendar.id}-${event.id}`,
-                  title: event.summary ?? 'Evento sin titulo',
-                  startsAt: event.start?.dateTime ?? '',
-                  endsAt: event.end?.dateTime ?? '',
-                  source: 'google' as const,
-                  focus: 'sync' as const,
-                })),
-              error: '',
-            }
-          } catch {
-            return {
-              calendar,
-              events: [] as Meeting[],
-              error: `No se pudo leer ${calendar.summary ?? calendar.id}`,
-            }
-          }
-        }),
-      )
-
-      const googleMeetings: Meeting[] = calendarResults
-        .flatMap((result) => result.events)
-        .sort((a, b) => parseISO(a.startsAt).getTime() - parseISO(b.startsAt).getTime())
-      const failedCalendars = calendarResults.filter((result) => result.error)
-
-      const importedTasks = await fetchGoogleTasks(token)
-
-      setMeetings((current) => [...current.filter((meeting) => meeting.source !== 'google'), ...googleMeetings])
-      setGoogleTasks(importedTasks)
-      setSyncMessage(
-        `${googleMeetings.length} eventos importados desde ${calendarsToSync.length} calendario${
-          calendarsToSync.length === 1 ? '' : 's'
-        } y ${importedTasks.length} tareas desde Google${
-          failedCalendars.length ? `. No se pudieron leer: ${failedCalendars.map((result) => result.calendar.summary ?? result.calendar.id).join(', ')}` : ''
-        }`,
-      )
+      setMeetings((current) => [...current.filter((meeting) => meeting.source !== 'google'), ...(payload.meetings ?? [])])
+      setGoogleTasks(payload.googleTasks ?? [])
       setIsCalendarConnected(true)
+      setLastGoogleSyncAt(payload.syncedAt ?? new Date().toISOString())
+      setSyncMessage(
+        payload.failedCalendars?.length
+          ? `${payload.message ?? 'Sincronizado.'} No se pudieron leer: ${payload.failedCalendars.join(', ')}`
+          : payload.message ?? 'Google Calendar y Tasks sincronizados automaticamente.',
+      )
     } catch (error) {
-      setSyncMessage(error instanceof Error ? error.message : 'No se pudo sincronizar Google')
+      setSyncMessage(error instanceof Error ? error.message : 'No se pudo sincronizar Google.')
     } finally {
       setIsCalendarSyncing(false)
     }
+  }, [authSession?.token, getAuthHeaders, setGoogleTasks, setMeetings])
+
+  async function disconnectGoogleCalendar() {
+    try {
+      await fetch(`${apiBaseUrl}/api/google/connection`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      })
+    } catch {
+      // The local UI still disconnects even if the remote request fails.
+    }
+
+    setIsCalendarConnected(false)
+    setLastGoogleSyncAt('')
+    setMeetings((current) => current.filter((meeting) => meeting.source !== 'google'))
+    setGoogleTasks([])
+    setSyncMessage('Google Calendar y Tasks desconectados.')
   }
 
-  async function syncGoogleTasks(token = calendarAccessToken) {
-    if (!token.trim()) {
-      connectGoogleCalendar()
+  useEffect(() => {
+    if (!authSession?.token) {
       return
     }
 
-    try {
-      setIsTasksSyncing(true)
-      setSyncMessage('Sincronizando tareas...')
-      const importedTasks = await fetchGoogleTasks(token)
-      setGoogleTasks(importedTasks)
-      setSyncMessage(`${importedTasks.length} tareas importadas desde Google Tasks`)
-      setIsCalendarConnected(true)
-    } catch (error) {
-      setSyncMessage(error instanceof Error ? error.message : 'No se pudo sincronizar Google Tasks')
-    } finally {
-      setIsTasksSyncing(false)
-    }
-  }
+    let cancelled = false
 
-  function disconnectGoogleCalendar() {
-    if (calendarAccessToken && window.google?.accounts?.oauth2) {
-      window.google.accounts.oauth2.revoke(calendarAccessToken, () => undefined)
+    async function checkGoogleConnection() {
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/google/status`, {
+          headers: getAuthHeaders(),
+        })
+        const payload = (await response.json()) as { connected?: boolean; message?: string }
+        if (cancelled) return
+
+        if (!response.ok) {
+          throw new Error(payload.message ?? 'No se pudo comprobar Google.')
+        }
+
+        setIsCalendarConnected(Boolean(payload.connected))
+        if (payload.connected) {
+          setSyncMessage('Google conectado. Sincronizando automaticamente...')
+          await syncGoogleCalendar()
+        } else {
+          setSyncMessage('Conecta Google una vez para activar agenda y tareas automaticas.')
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSyncMessage(error instanceof Error ? error.message : 'No se pudo comprobar Google.')
+        }
+      }
     }
-    setCalendarAccessToken('')
-    setIsCalendarConnected(false)
-    setMeetings((current) => current.filter((meeting) => meeting.source !== 'google'))
-    setGoogleTasks([])
-    setSyncMessage('Google Calendar y Tasks desconectados de esta sesion.')
-  }
+
+    void checkGoogleConnection()
+
+    return () => {
+      cancelled = true
+    }
+  }, [authSession?.token, getAuthHeaders, syncGoogleCalendar])
+
+  useEffect(() => {
+    if (!authSession?.token || !isCalendarConnected) return
+
+    const intervalId = window.setInterval(() => {
+      void syncGoogleCalendar()
+    }, 1000 * 60 * 5)
+
+    return () => window.clearInterval(intervalId)
+  }, [authSession?.token, isCalendarConnected, syncGoogleCalendar])
 
   function addProject() {
     if (!projectDraft.name.trim()) return
@@ -1474,11 +1312,39 @@ function App() {
     setSleepLogs(defaultSleep)
     setTheme('light')
     setDashboardPreferences(defaultDashboardPreferences)
-    setCalendarAccessToken('')
     setIsCalendarConnected(false)
+    setLastGoogleSyncAt('')
     setEditingProjectId(null)
     setEditingSleepDate(null)
     setStorageMessage('Datos restablecidos a la version inicial.')
+  }
+
+  if (!authUser) {
+    return (
+      <main className="auth-shell" data-theme={selectedTheme.id}>
+        <section className="auth-card">
+          <div className="brand">
+            <div className="brand-mark">
+              <Activity size={22} />
+            </div>
+            <div>
+              <strong>Nexus OS</strong>
+              <span>Dashboard personal</span>
+            </div>
+          </div>
+          <div>
+            <p className="eyebrow">Acceso seguro</p>
+            <h1>Inicia sesion para ver tu dashboard.</h1>
+            <p className="auth-copy">
+              Tu agenda, tareas y datos personales quedan vinculados a tu cuenta. Despues Google Calendar y Tasks se mantienen
+              sincronizados automaticamente.
+            </p>
+          </div>
+          {isAuthenticating ? <div className="auth-loading">Verificando con Google...</div> : <div ref={googleSignInRef} className="google-signin-slot" />}
+          <p className="auth-message">{authMessage}</p>
+        </section>
+      </main>
+    )
   }
 
   return (
@@ -1527,25 +1393,17 @@ function App() {
             <Bot size={17} />
             Cuenta
           </div>
-          {authUser ? (
-            <div className="account-card">
-              {authUser.picture ? <img src={authUser.picture} alt="" /> : <div className="account-fallback">{authUser.name[0]}</div>}
-              <div>
-                <strong>{authUser.name}</strong>
-                <span>{authUser.email}</span>
-              </div>
+          <div className="account-card">
+            {authUser.picture ? <img src={authUser.picture} alt="" /> : <div className="account-fallback">{authUser.name[0]}</div>}
+            <div>
+              <strong>{authUser.name}</strong>
+              <span>{authUser.email}</span>
             </div>
-          ) : isAuthenticating ? (
-            <div className="auth-loading">Verificando con Google...</div>
-          ) : (
-            <div ref={googleSignInRef} className="google-signin-slot" />
-          )}
+          </div>
           <p>{authMessage}</p>
-          {authUser && (
-            <button type="button" className="subtle-button" onClick={() => void logout()}>
-              Cerrar sesion
-            </button>
-          )}
+          <button type="button" className="subtle-button" onClick={() => void logout()}>
+            Cerrar sesion
+          </button>
         </section>
 
         <section className="theme-panel" aria-labelledby="theme-title">
@@ -1686,28 +1544,33 @@ function App() {
             Google Calendar + Tasks
           </div>
           <div className={isCalendarConnected ? 'connection-status connected' : 'connection-status'}>
-            {isCalendarConnected ? 'Conectado por OAuth' : 'No conectado'}
+            {isCalendarConnected ? 'Sincronizacion automatica' : 'Pendiente de conectar'}
           </div>
           <div className="calendar-actions">
-            <button type="button" onClick={connectGoogleCalendar} disabled={!googleClientId}>
-              <CalendarCheck size={16} />
-              Conectar
-            </button>
-            <button type="button" onClick={() => void syncGoogleCalendar()} disabled={isCalendarSyncing || !googleClientId}>
-              <RefreshCcw size={16} />
-              {isCalendarSyncing ? 'Sincronizando' : 'Sync agenda'}
-            </button>
-            <button type="button" onClick={() => void syncGoogleTasks()} disabled={isTasksSyncing || !googleClientId}>
-              <CheckCircle2 size={16} />
-              {isTasksSyncing ? 'Sincronizando' : 'Sync tareas'}
-            </button>
+            {isCalendarConnected ? (
+              <button type="button" onClick={() => void syncGoogleCalendar()} disabled={isCalendarSyncing}>
+                <RefreshCcw size={16} />
+                {isCalendarSyncing ? 'Actualizando' : 'Actualizar ahora'}
+              </button>
+            ) : (
+              <button type="button" onClick={() => void connectGoogleCalendar()} disabled={!googleClientId}>
+                <CalendarCheck size={16} />
+                Conectar una vez
+              </button>
+            )}
             {isCalendarConnected && (
-              <button type="button" className="secondary-danger" onClick={disconnectGoogleCalendar}>
+              <button type="button" className="secondary-danger" onClick={() => void disconnectGoogleCalendar()}>
                 <X size={16} />
                 Desconectar
               </button>
             )}
           </div>
+          {lastGoogleSyncAt && (
+            <small className="sync-meta">
+              <RefreshCcw size={16} />
+              Ultima actualizacion {format(parseISO(lastGoogleSyncAt), 'HH:mm')}
+            </small>
+          )}
           <p>{syncMessage}</p>
         </section>
       </aside>
@@ -1837,7 +1700,7 @@ function App() {
                   ) : (
                     <div className="empty-state">
                       <strong>No hay tareas importadas para hoy.</strong>
-                      <span>Conecta Google y usa Sync tareas para traerlas.</span>
+                    <span>Conecta Google una vez para traerlas automaticamente.</span>
                     </div>
                   )}
                 </div>

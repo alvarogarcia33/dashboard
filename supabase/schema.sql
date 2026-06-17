@@ -24,3 +24,11 @@ create table if not exists public.sessions (
 
 create index if not exists sessions_user_id_idx on public.sessions(user_id);
 create index if not exists sessions_expires_at_idx on public.sessions(expires_at);
+
+create table if not exists public.google_connections (
+  user_id text primary key references public.users(id) on delete cascade,
+  refresh_token text not null,
+  scope text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
