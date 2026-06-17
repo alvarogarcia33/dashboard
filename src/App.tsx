@@ -1322,7 +1322,57 @@ function App() {
   if (!authUser) {
     return (
       <main className="auth-shell" data-theme={selectedTheme.id}>
-        <section className="auth-card">
+        <section className="auth-hero" aria-label="Inicio de sesion">
+          <div className="auth-preview" aria-hidden="true">
+            <div className="preview-topline">
+              <div className="brand">
+                <div className="brand-mark">
+                  <Activity size={22} />
+                </div>
+                <div>
+                  <strong>Nexus OS</strong>
+                  <span>Tu sistema diario</span>
+                </div>
+              </div>
+              <span className="preview-status">Auto sync</span>
+            </div>
+            <div className="preview-metrics">
+              <div>
+                <CalendarDays size={18} />
+                <strong>Agenda</strong>
+                <span>Semana viva</span>
+              </div>
+              <div>
+                <CheckCircle2 size={18} />
+                <strong>Tareas</strong>
+                <span>Google Tasks</span>
+              </div>
+              <div>
+                <Moon size={18} />
+                <strong>Sueno</strong>
+                <span>Energia</span>
+              </div>
+            </div>
+            <div className="preview-calendar">
+              {['lun', 'mar', 'mie', 'jue', 'vie'].map((day, index) => (
+                <div className={index === 2 ? 'preview-day active' : 'preview-day'} key={day}>
+                  <span>{day}</span>
+                  <i />
+                  {index === 1 && <b>09:30</b>}
+                  {index === 2 && <b>15:00</b>}
+                </div>
+              ))}
+            </div>
+            <div className="preview-note">
+              <Sparkles size={18} />
+              <div>
+                <strong>Entra una vez. Todo queda andando.</strong>
+                <span>Calendario y tareas se actualizan solos mientras trabajas.</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="auth-card">
           <div className="brand">
             <div className="brand-mark">
               <Activity size={22} />
@@ -1334,14 +1384,14 @@ function App() {
           </div>
           <div>
             <p className="eyebrow">Acceso seguro</p>
-            <h1>Inicia sesion para ver tu dashboard.</h1>
+            <h1>Tu dia listo apenas entras.</h1>
             <p className="auth-copy">
-              Tu agenda, tareas y datos personales quedan vinculados a tu cuenta. Despues Google Calendar y Tasks se mantienen
-              sincronizados automaticamente.
+              Inicia sesion con Google y Nexus carga tu agenda, tareas y contexto personal sin pedirte que sincronices cada vez.
             </p>
           </div>
           {isAuthenticating ? <div className="auth-loading">Verificando con Google...</div> : <div ref={googleSignInRef} className="google-signin-slot" />}
           <p className="auth-message">{authMessage}</p>
+          </div>
         </section>
       </main>
     )
