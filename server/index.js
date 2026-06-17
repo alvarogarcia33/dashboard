@@ -1,7 +1,6 @@
 import cors from 'cors'
 import dotenv from 'dotenv'
 import express from 'express'
-import { OAuth2Client } from 'google-auth-library'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
@@ -18,7 +17,6 @@ const port = Number(process.env.API_PORT ?? 8787)
 const allowedOrigin = process.env.CLIENT_ORIGIN ?? 'http://127.0.0.1:5173'
 const googleClientId = process.env.GOOGLE_CLIENT_ID ?? process.env.VITE_GOOGLE_CLIENT_ID
 const openaiModel = process.env.OPENAI_MODEL ?? 'gpt-5.5'
-const authClient = new OAuth2Client(googleClientId)
 const supabaseUrl = process.env.SUPABASE_URL?.trim()
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
 const isVercel = Boolean(process.env.VERCEL)
@@ -337,6 +335,30 @@ function getErrorMessage(error) {
   return 'No se pudo iniciar sesion.'
 }
 
+async function verifyGoogleCredential(credential) {
+  const tokenInfoResponse = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`)
+  const payload = await tokenInfoResponse.json().catch(() => ({}))
+
+  if (!tokenInfoResponse.ok) {
+    throw new Error(payload.error_description ?? payload.error ?? 'Google no pudo validar la credencial.')
+  }
+
+  if (payload.aud !== googleClientId) {
+    throw new Error('La credencial pertenece a otro Google Client ID.')
+  }
+
+  if (!payload.sub || !payload.email) {
+    throw new Error('La credencial de Google no incluye usuario o email.')
+  }
+
+  const expiresAt = Number(payload.exp ?? 0) * 1000
+  if (!expiresAt || expiresAt <= Date.now()) {
+    throw new Error('La credencial de Google expiro. Intenta iniciar sesion otra vez.')
+  }
+
+  return payload
+}
+
 function normalizePlannerMessages(messages) {
   if (!Array.isArray(messages)) return []
 
@@ -372,12 +394,9 @@ app.post('/api/auth/google', async (request, response) => {
       return
     }
 
-    let ticket
+    let payload
     try {
-      ticket = await authClient.verifyIdToken({
-        idToken: credential,
-        audience: googleClientId,
-      })
+      payload = await verifyGoogleCredential(credential)
     } catch (error) {
       const message = getErrorMessage(error)
       response.status(401).json({
@@ -386,9 +405,8 @@ app.post('/api/auth/google', async (request, response) => {
       })
       return
     }
-    const payload = ticket.getPayload()
 
-    if (!payload?.sub || !payload.email) {
+    if (!payload.sub || !payload.email) {
       response.status(401).json({ ok: false, message: 'Token de Google invalido.' })
       return
     }
