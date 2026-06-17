@@ -18,6 +18,8 @@
   --bar-muted: #d8dee9;
   --shadow: rgba(15, 23, 42, 0.06);
   min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
   display: grid;
   grid-template-columns: 236px minmax(0, 1fr);
   color: var(--ink);
@@ -467,6 +469,7 @@ button:disabled {
 
 .workspace {
   min-width: 0;
+  overflow-x: hidden;
   padding: 18px 22px;
   display: grid;
   gap: 14px;
@@ -558,15 +561,23 @@ h3 {
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: start;
   gap: 12px;
 }
 
+.week-card,
 .sleep-card {
   grid-column: span 2;
-  max-height: 420px;
+}
+
+.sleep-card {
+  max-height: 390px;
   overflow-y: auto;
+}
+
+.project-chart {
+  grid-column: span 2;
 }
 
 .surface {
@@ -650,6 +661,111 @@ h3 {
   align-items: end;
   padding: 10px 0 0;
   border-bottom: 1px solid var(--line);
+}
+
+.weekly-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.week-day {
+  min-width: 0;
+  min-height: 214px;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.week-day.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.week-day-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.week-day-header span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: lowercase;
+}
+
+.week-day-header strong {
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.week-day-load {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bar-muted);
+}
+
+.week-day-load i {
+  display: block;
+  height: 100%;
+  min-width: 6px;
+  border-radius: inherit;
+}
+
+.week-events {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.week-event {
+  min-width: 0;
+  padding: 6px;
+  border-left: 3px solid #2563eb;
+  border-radius: 7px;
+  background: var(--surface);
+  box-shadow: 0 1px 0 var(--shadow);
+}
+
+.week-event time,
+.week-events small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.week-event span {
+  min-width: 0;
+  display: block;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-event.decision {
+  border-left-color: #f59e0b;
+}
+
+.week-event.deep-work {
+  border-left-color: #22a06b;
+}
+
+.week-event.personal {
+  border-left-color: #6f5adc;
 }
 
 .bar-chart-column,
@@ -1317,7 +1433,9 @@ h3 {
     grid-template-columns: 1fr;
   }
 
-  .sleep-card {
+  .week-card,
+  .sleep-card,
+  .project-chart {
     grid-column: auto;
   }
 }

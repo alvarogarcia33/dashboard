@@ -745,12 +745,15 @@ function App() {
     const start = startOfWeek(today, { weekStartsOn: 1 })
     return Array.from({ length: 7 }, (_, index) => {
       const day = addDays(start, index)
-      const dayMeetings = meetings.filter((meeting) => isSameDay(parseISO(meeting.startsAt), day))
+      const dayMeetings = meetings
+        .filter((meeting) => isSameDay(parseISO(meeting.startsAt), day))
+        .sort((a, b) => parseISO(a.startsAt).getTime() - parseISO(b.startsAt).getTime())
       return {
         label: format(day, 'EEE', { locale: es }),
         day: format(day, 'd'),
         date: format(day, 'yyyy-MM-dd'),
         meetings: dayMeetings.length,
+        events: dayMeetings,
         hours: Number(
           dayMeetings
             .reduce((total, meeting) => {
@@ -1705,25 +1708,37 @@ function App() {
             <div className="section-heading">
               <div>
                 <p className="eyebrow">Calendario semanal</p>
-                <h2>Carga de agenda</h2>
+                <h2>Semana visible</h2>
               </div>
+              <span>{focusHours}h ocupadas</span>
             </div>
-            <div className="chart-box">
-              <div className="bar-chart-lite">
-                {weekDays.map((day) => (
-                  <div className="bar-chart-column" key={day.date}>
-                    <span style={{ height: `${Math.max(8, Math.min(100, day.hours * 18))}%`, background: selectedTheme.chart }} />
-                    <small>{day.label}</small>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="week-strip">
+            <div className="weekly-calendar">
               {weekDays.map((day) => (
-                <div className={day.date === format(today, 'yyyy-MM-dd') ? 'active' : ''} key={day.date}>
-                  <span>{day.label}</span>
-                  <strong>{day.day}</strong>
-                  <small>{day.meetings} ev.</small>
+                <div className={day.date === format(today, 'yyyy-MM-dd') ? 'week-day active' : 'week-day'} key={day.date}>
+                  <div className="week-day-header">
+                    <span>{day.label}</span>
+                    <strong>{day.day}</strong>
+                  </div>
+                  <div className="week-day-load">
+                    <i style={{ width: `${Math.max(8, Math.min(100, day.hours * 18))}%`, background: selectedTheme.chart }} />
+                  </div>
+                  <div className="week-events">
+                    {day.events.length ? (
+                      <>
+                        {day.events.slice(0, 3).map((event) => (
+                          <div className={`week-event ${event.focus}`} key={event.id}>
+                            <time>
+                              {shortTime(event.startsAt)} - {shortTime(event.endsAt)}
+                            </time>
+                            <span>{event.title}</span>
+                          </div>
+                        ))}
+                        {day.events.length > 3 && <small>+{day.events.length - 3} mas</small>}
+                      </>
+                    ) : (
+                      <small>Libre</small>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
