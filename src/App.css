@@ -3,10 +3,11 @@
   --ink: #111827;
   --muted: #667085;
   --line: #d9e1ea;
-  --surface: #ffffff;
-  --surface-soft: #fbfcfe;
-  --page: #edf2f7;
-  --sidebar: #f7f9fb;
+  --surface: rgba(255, 255, 255, 0.74);
+  --surface-solid: #ffffff;
+  --surface-soft: rgba(248, 251, 255, 0.66);
+  --page: #eaf1f8;
+  --sidebar: rgba(247, 250, 253, 0.74);
   --nav-hover: #e9eef5;
   --brand: #1f2937;
   --brand-contrast: #ffffff;
@@ -17,14 +18,19 @@
   --ai-bg: #eef4ff;
   --ai-border: #c7d7fe;
   --bar-muted: #d8dee9;
-  --shadow: rgba(15, 23, 42, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.56);
+  --glass-highlight: rgba(255, 255, 255, 0.42);
+  --shadow: rgba(27, 49, 84, 0.14);
   min-height: 100vh;
   width: 100%;
   overflow-x: hidden;
   display: grid;
   grid-template-columns: 236px minmax(0, 1fr);
   color: var(--ink);
-  background: var(--page);
+  background:
+    radial-gradient(circle at 14% 12%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 26%),
+    radial-gradient(circle at 82% 8%, color-mix(in srgb, var(--primary) 14%, transparent), transparent 30%),
+    linear-gradient(135deg, color-mix(in srgb, var(--primary) 8%, var(--page)), var(--page) 42%, color-mix(in srgb, var(--primary) 10%, #ffffff));
 }
 
 .app-shell[data-theme='blue'],
@@ -32,10 +38,11 @@
   --ink: #0c223f;
   --muted: #526b8c;
   --line: #bfd4ef;
-  --surface: #ffffff;
-  --surface-soft: #f5f9ff;
+  --surface: rgba(255, 255, 255, 0.72);
+  --surface-solid: #ffffff;
+  --surface-soft: rgba(245, 249, 255, 0.66);
   --page: #eaf3ff;
-  --sidebar: #dcecff;
+  --sidebar: rgba(220, 236, 255, 0.74);
   --nav-hover: #c9e0fb;
   --brand: #0f5fb8;
   --brand-contrast: #ffffff;
@@ -46,7 +53,9 @@
   --ai-bg: #dff0ff;
   --ai-border: #96c7ef;
   --bar-muted: #c7dbf0;
-  --shadow: rgba(15, 95, 184, 0.1);
+  --glass-border: rgba(255, 255, 255, 0.54);
+  --glass-highlight: rgba(255, 255, 255, 0.4);
+  --shadow: rgba(15, 95, 184, 0.16);
 }
 
 .app-shell[data-theme='dark-gold'],
@@ -54,10 +63,11 @@
   --ink: #f7e9c6;
   --muted: #b7aa8a;
   --line: #34313a;
-  --surface: #1a1a20;
-  --surface-soft: #202027;
+  --surface: rgba(26, 26, 32, 0.78);
+  --surface-solid: #1a1a20;
+  --surface-soft: rgba(32, 32, 39, 0.72);
   --page: #101014;
-  --sidebar: #141419;
+  --sidebar: rgba(20, 20, 25, 0.78);
   --nav-hover: #25232b;
   --brand: #d9b65f;
   --brand-contrast: #15120a;
@@ -68,7 +78,27 @@
   --ai-bg: #211d15;
   --ai-border: #5d4c25;
   --bar-muted: #3b3742;
-  --shadow: rgba(0, 0, 0, 0.3);
+  --glass-border: rgba(217, 182, 95, 0.24);
+  --glass-highlight: rgba(255, 255, 255, 0.08);
+  --shadow: rgba(0, 0, 0, 0.34);
+}
+
+.app-shell[data-theme='dark-gold'] {
+  background:
+    radial-gradient(circle at 18% 8%, rgba(217, 182, 95, 0.16), transparent 28%),
+    radial-gradient(circle at 82% 18%, rgba(143, 124, 246, 0.12), transparent 32%),
+    linear-gradient(145deg, #0f0f14, #16151b 52%, #121114);
+}
+
+.app-shell[data-theme='dark-gold'] .schedule-event {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent),
+    var(--surface-solid);
+}
+
+.app-shell[data-theme='dark-gold'] input,
+.app-shell[data-theme='dark-gold'] select {
+  background: #17171d;
 }
 
 .app-shell[data-theme='calm'],
@@ -76,10 +106,11 @@
   --ink: #153226;
   --muted: #5f746a;
   --line: #c8ded2;
-  --surface: #ffffff;
-  --surface-soft: #f7fbf8;
+  --surface: rgba(255, 255, 255, 0.72);
+  --surface-solid: #ffffff;
+  --surface-soft: rgba(247, 251, 248, 0.68);
   --page: #eef7f2;
-  --sidebar: #e2f0e8;
+  --sidebar: rgba(226, 240, 232, 0.76);
   --nav-hover: #d1e6da;
   --brand: #20855f;
   --brand-contrast: #ffffff;
@@ -90,7 +121,9 @@
   --ai-bg: #e0f1e8;
   --ai-border: #9ccdb3;
   --bar-muted: #c8ded2;
-  --shadow: rgba(32, 133, 95, 0.1);
+  --glass-border: rgba(255, 255, 255, 0.54);
+  --glass-highlight: rgba(255, 255, 255, 0.4);
+  --shadow: rgba(32, 133, 95, 0.16);
 }
 
 .auth-shell {
@@ -267,12 +300,14 @@
   top: 0;
   height: 100vh;
   padding: 16px 12px;
-  border-right: 1px solid var(--line);
+  border-right: 1px solid var(--glass-border);
   background: var(--sidebar);
+  backdrop-filter: blur(18px) saturate(1.25);
   display: flex;
   flex-direction: column;
   gap: 14px;
   overflow-y: auto;
+  box-shadow: 12px 0 38px rgba(15, 23, 42, 0.07);
 }
 
 .brand,
@@ -304,7 +339,9 @@
   border-radius: 8px;
   color: #ffffff;
   color: var(--brand-contrast);
-  background: var(--brand);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--brand) 84%, #ffffff), var(--brand));
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--brand) 24%, transparent);
 }
 
 .brand strong,
@@ -332,10 +369,16 @@
   border-radius: 8px;
   font-size: 14px;
   font-weight: 700;
+  transition:
+    background 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .nav-list a:hover {
   background: var(--nav-hover);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  transform: translateX(2px);
 }
 
 .swatches {
@@ -365,9 +408,10 @@
   gap: 8px;
   align-items: center;
   padding: 7px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-border);
   border-radius: 8px;
   background: var(--surface-soft);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
 .theme-select-row > span:first-child {
@@ -384,7 +428,7 @@
   padding: 5px 8px;
   font-size: 12px;
   font-weight: 800;
-  background: var(--surface);
+  background: var(--surface-solid);
 }
 
 .integration-panel,
@@ -395,9 +439,12 @@
 .surface,
 .metric-card {
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-border);
   border-radius: 8px;
-  box-shadow: 0 14px 34px var(--shadow);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 18px 42px var(--shadow);
+  backdrop-filter: blur(18px) saturate(1.2);
 }
 
 .integration-panel {
@@ -458,7 +505,7 @@ select {
   border-radius: 7px;
   padding: 8px 9px;
   color: var(--ink);
-  background: var(--surface);
+  background: var(--surface-solid);
 }
 
 input::placeholder {
@@ -528,7 +575,7 @@ button {
 .connection-status {
   padding: 6px 8px;
   color: var(--muted);
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-border);
   border-radius: 7px;
   background: var(--surface-soft);
   font-size: 12px;
@@ -644,9 +691,9 @@ button:disabled {
 .workspace {
   min-width: 0;
   overflow-x: hidden;
-  padding: 18px 22px;
+  padding: 22px 26px;
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 .topbar {
@@ -654,6 +701,16 @@ button:disabled {
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
+  padding: 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--surface) 72%, transparent), color-mix(in srgb, var(--primary) 9%, transparent)),
+    var(--surface);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 18px 44px var(--shadow);
+  backdrop-filter: blur(18px) saturate(1.2);
 }
 
 .eyebrow {
@@ -675,7 +732,7 @@ p {
 h1 {
   max-width: 760px;
   margin-bottom: 0;
-  font-size: 28px;
+  font-size: 31px;
   line-height: 1.12;
   letter-spacing: 0;
 }
@@ -695,27 +752,42 @@ h3 {
 .primary-action {
   flex: 0 0 auto;
   padding: 0 12px;
-  background: var(--brand);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--brand) 76%, var(--primary)), var(--brand));
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--brand) 22%, transparent);
 }
 
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(128px, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
 .metric-card {
-  padding: 11px;
+  position: relative;
+  overflow: hidden;
+  padding: 13px;
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
   gap: 4px 9px;
   align-items: center;
 }
 
+.metric-card::before,
+.surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(135deg, var(--glass-highlight), transparent 42%);
+  opacity: 0.62;
+}
+
 .metric-icon {
   grid-row: 1 / span 3;
   color: var(--primary);
-  background: var(--primary-soft);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--primary-soft) 80%, #ffffff), var(--primary-soft));
 }
 
 .metric-icon svg {
@@ -766,8 +838,15 @@ h3 {
 }
 
 .surface {
+  position: relative;
+  overflow: hidden;
   min-width: 0;
-  padding: 14px;
+  padding: 16px;
+}
+
+.surface > * {
+  position: relative;
+  z-index: 1;
 }
 
 .section-heading {
@@ -797,10 +876,11 @@ h3 {
   grid-template-columns: 92px minmax(0, 1fr);
   gap: 10px;
   padding: 9px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-border);
   border-left: 4px solid #2563eb;
   border-radius: 8px;
   background: var(--surface-soft);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
 .timeline-item time {
@@ -862,9 +942,12 @@ h3 {
   grid-template-columns: 58px repeat(7, minmax(92px, 1fr));
   grid-template-rows: 42px 520px;
   overflow-x: auto;
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-border);
   border-radius: 8px;
-  background: var(--surface-soft);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--primary) 5%, transparent), transparent),
+    var(--surface-soft);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
 .schedule-corner,
@@ -878,9 +961,10 @@ h3 {
   position: sticky;
   left: 0;
   z-index: 3;
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  background: var(--primary-soft);
+  border-right: 1px solid color-mix(in srgb, var(--primary) 28%, var(--line));
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 28%, var(--line));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--primary-soft) 78%, #ffffff), var(--primary-soft));
 }
 
 .schedule-day-title {
@@ -888,9 +972,10 @@ h3 {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border-bottom: 1px solid var(--line);
-  border-left: 1px solid var(--line);
-  background: var(--surface);
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 20%, var(--line));
+  border-left: 1px solid color-mix(in srgb, var(--primary) 14%, var(--line));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-solid) 78%, var(--primary-soft)), var(--surface));
 }
 
 .schedule-day-title span {
@@ -908,7 +993,8 @@ h3 {
 
 .schedule-day-title.active {
   color: var(--primary);
-  background: var(--primary-soft);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--primary-soft) 84%, #ffffff), var(--primary-soft));
 }
 
 .schedule-hours {
@@ -917,8 +1003,8 @@ h3 {
   z-index: 2;
   display: grid;
   grid-template-rows: repeat(14, 1fr);
-  border-right: 1px solid var(--line);
-  background: var(--surface);
+  border-right: 1px solid color-mix(in srgb, var(--primary) 18%, var(--line));
+  background: color-mix(in srgb, var(--surface-solid) 72%, var(--primary-soft));
 }
 
 .schedule-hours time {
@@ -926,7 +1012,7 @@ h3 {
   justify-content: flex-end;
   padding: 4px 8px 0 0;
   color: var(--muted);
-  border-top: 1px solid var(--line);
+  border-top: 1px solid color-mix(in srgb, var(--primary) 16%, var(--line));
   font-size: 11px;
   font-weight: 800;
 }
@@ -934,14 +1020,14 @@ h3 {
 .schedule-day {
   position: relative;
   min-width: 92px;
-  border-left: 1px solid var(--line);
+  border-left: 1px solid color-mix(in srgb, var(--primary) 14%, var(--line));
   background:
     repeating-linear-gradient(
       to bottom,
       transparent 0,
       transparent calc(100% / 13 - 1px),
-      var(--line) calc(100% / 13 - 1px),
-      var(--line) calc(100% / 13)
+      color-mix(in srgb, var(--primary) 16%, var(--line)) calc(100% / 13 - 1px),
+      color-mix(in srgb, var(--primary) 16%, var(--line)) calc(100% / 13)
     ),
     var(--surface-soft);
 }
@@ -952,8 +1038,8 @@ h3 {
       to bottom,
       transparent 0,
       transparent calc(100% / 13 - 1px),
-      var(--line) calc(100% / 13 - 1px),
-      var(--line) calc(100% / 13)
+      color-mix(in srgb, var(--primary) 22%, var(--line)) calc(100% / 13 - 1px),
+      color-mix(in srgb, var(--primary) 22%, var(--line)) calc(100% / 13)
     ),
     color-mix(in srgb, var(--primary-soft) 60%, var(--surface));
 }
@@ -969,8 +1055,12 @@ h3 {
   padding: 7px;
   border-left: 4px solid #2563eb;
   border-radius: 8px;
-  background: var(--surface);
-  box-shadow: 0 8px 20px var(--shadow);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, #ffffff 34%, transparent), transparent),
+    var(--surface-solid);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.52),
+    0 12px 28px var(--shadow);
 }
 
 .schedule-event time {
@@ -1025,7 +1115,9 @@ h3 {
   min-height: 8px;
   display: block;
   border-radius: 8px 8px 0 0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    0 10px 22px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
 .bar-chart-column small,
@@ -1044,9 +1136,10 @@ h3 {
   display: flex;
   align-items: stretch;
   overflow: hidden;
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-border);
   border-radius: 8px;
   background: var(--surface-soft);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
 .status-stack span {
@@ -1094,9 +1187,10 @@ h3 {
   gap: 10px;
   align-items: start;
   padding: 9px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-border);
   border-radius: 8px;
   background: var(--surface-soft);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
 .task-row svg {
@@ -1125,7 +1219,7 @@ h3 {
   display: grid;
   gap: 4px;
   padding: 10px;
-  border: 1px dashed var(--line);
+  border: 1px dashed color-mix(in srgb, var(--primary) 24%, var(--line));
   border-radius: 8px;
   background: var(--surface-soft);
 }
@@ -1201,9 +1295,10 @@ h3 {
   gap: 10px;
   align-items: center;
   padding: 8px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-border);
   border-radius: 8px;
   background: var(--surface-soft);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
 .sleep-row span,
@@ -1269,9 +1364,10 @@ h3 {
   gap: 10px;
   align-items: center;
   padding: 9px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-border);
   border-radius: 8px;
   background: var(--surface-soft);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
 .project-row span {
