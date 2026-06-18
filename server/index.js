@@ -36,6 +36,10 @@ function initializeSupabaseClient() {
 
 const supabase = initializeSupabaseClient()
 const googleWorkspaceScope = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly'
+const configuredGoogleCalendarIds = (process.env.GOOGLE_CALENDAR_ID ?? '')
+  .split(',')
+  .map((calendarId) => calendarId.trim())
+  .filter(Boolean)
 
 const app = express()
 let database
@@ -443,7 +447,21 @@ async function fetchGoogleTasksWithToken(accessToken) {
   return taskGroups.flat()
 }
 
-async function fetchGoogleMeetingsWithToken(accessToken) {
+function getPreferredGoogleCalendarIds(userEmail) {
+  const candidates = [...configuredGoogleCalendarIds]
+
+  if (userEmail) {
+    candidates.push(userEmail)
+    if (userEmail.endsWith('@gmail.com')) {
+      candidates.push(userEmail.replace('@gmail.com', '@googlemail.com'))
+    }
+  }
+
+  candidates.push('primary')
+  return [...new Set(candidates.filter(Boolean))]
+}
+
+async function fetchGoogleMeetingsWithToken(accessToken, preferredCalendarIds = ['primary']) {
   const now = new Date()
   const timeMin = new Date(now.getTime() - 1000 * 60 * 60 * 24 * 7).toISOString()
   const timeMax = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 21).toISOString()
@@ -458,22 +476,30 @@ async function fetchGoogleMeetingsWithToken(accessToken) {
     timeZone,
   })
 
-  const calendarListResponse = await fetch(
-    'https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader&showHidden=true',
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
+  let calendarListWarning = ''
+  let visibleCalendars = []
+  const calendarListResponse = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader&showHidden=true', {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Cache-Control': 'no-cache',
     },
-  )
+  })
 
-  if (!calendarListResponse.ok) {
-    throw new Error('Google Calendar rechazo la lista de calendarios.')
+  if (calendarListResponse.ok) {
+    const calendarListPayload = await calendarListResponse.json().catch(() => ({}))
+    visibleCalendars = (Array.isArray(calendarListPayload.items) ? calendarListPayload.items : []).filter(
+      (calendar) => calendar.id && calendar.selected !== false,
+    )
+  } else {
+    const payload = await calendarListResponse.json().catch(() => ({}))
+    calendarListWarning = payload.error?.message ?? 'Google Calendar rechazo la lista de calendarios.'
   }
 
-  const calendarListPayload = await calendarListResponse.json().catch(() => ({}))
-  const visibleCalendars = (Array.isArray(calendarListPayload.items) ? calendarListPayload.items : []).filter(
-    (calendar) => calendar.id && calendar.selected !== false,
-  )
-  const calendarsToSync = visibleCalendars.length ? visibleCalendars : [{ id: 'primary', summary: 'Principal', primary: true }]
+  const preferredCalendars = preferredCalendarIds.map((id) => ({ id, summary: id === 'primary' ? 'Principal' : id }))
+  const calendarsToSync = [...visibleCalendars, ...preferredCalendars].reduce((calendars, calendar) => {
+    if (calendar.id && !calendars.some((item) => item.id === calendar.id)) calendars.push(calendar)
+    return calendars
+  }, [])
 
   const calendarResults = await Promise.all(
     calendarsToSync.map(async (calendar) => {
@@ -520,7 +546,10 @@ async function fetchGoogleMeetingsWithToken(accessToken) {
       .flatMap((result) => result.events)
       .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()),
     calendarsSynced: calendarsToSync.length,
-    failedCalendars: calendarResults.filter((result) => result.error).map((result) => result.calendar.summary ?? result.calendar.id),
+    failedCalendars: [
+      ...(calendarListWarning ? [calendarListWarning] : []),
+      ...calendarResults.filter((result) => result.error).map((result) => result.calendar.summary ?? result.calendar.id),
+    ],
   }
 }
 
@@ -891,7 +920,7 @@ app.post('/api/google/sync', async (request, response) => {
     let googleTasks = null
 
     try {
-      calendarSync = await fetchGoogleMeetingsWithToken(accessToken)
+      calendarSync = await fetchGoogleMeetingsWithToken(accessToken, getPreferredGoogleCalendarIds(user.email))
     } catch (error) {
       errors.push(`Calendar: ${getErrorMessage(error)}`)
     }

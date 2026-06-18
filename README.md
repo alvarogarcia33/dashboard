@@ -53,6 +53,7 @@ VITE_DEMO_USER_ID=demo
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 GOOGLE_REDIRECT_URI=https://tu-app.vercel.app/api/google/callback
+GOOGLE_CALENDAR_ID=alvarogarcia33@googlemail.com
 GOOGLE_TIME_ZONE=America/Montevideo
 SESSION_STATE_SECRET=...
 OPENAI_API_KEY=...
@@ -140,7 +141,8 @@ El dashboard se abre solo despues del login. Desde la pantalla lateral se conect
 9. En produccion, agregar `https://tu-app.vercel.app/api/google/callback` como Authorized redirect URI.
 10. Copiar el Client ID en `.env` como `VITE_GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_ID`.
 11. Copiar el Client Secret en `.env` como `GOOGLE_CLIENT_SECRET`.
-12. Reiniciar `npm run dev` y `npm run dev:api`.
+12. Si el calendario principal usa otro ID, configurar `GOOGLE_CALENDAR_ID`. Ejemplo: `alvarogarcia33@googlemail.com`.
+13. Reiniciar `npm run dev` y `npm run dev:api`.
 
 La app usa los scopes `https://www.googleapis.com/auth/calendar.readonly` y `https://www.googleapis.com/auth/tasks.readonly`. No guarda access tokens en `localStorage`; el backend refresca access tokens temporales usando el refresh token guardado para cada usuario.
 
