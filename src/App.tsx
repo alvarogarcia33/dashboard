@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChangeEvent, ReactNode } from 'react'
+import type { CSSProperties, ChangeEvent, ReactNode } from 'react'
 import {
   Activity,
   Archive,
@@ -704,6 +704,28 @@ function App() {
       }
     })
   }, [meetings])
+  const calendarStartHour = 8
+  const calendarEndHour = 21
+  const calendarHours = useMemo(
+    () => Array.from({ length: calendarEndHour - calendarStartHour + 1 }, (_, index) => calendarStartHour + index),
+    [],
+  )
+  const getCalendarEventStyle = useCallback((event: Meeting): CSSProperties => {
+    const startsAt = parseISO(event.startsAt)
+    const endsAt = parseISO(event.endsAt)
+    const startMinutes = startsAt.getHours() * 60 + startsAt.getMinutes()
+    const endMinutes = endsAt.getHours() * 60 + endsAt.getMinutes()
+    const dayStartMinutes = calendarStartHour * 60
+    const dayEndMinutes = calendarEndHour * 60
+    const clampedStart = Math.max(dayStartMinutes, Math.min(dayEndMinutes, startMinutes))
+    const clampedEnd = Math.max(clampedStart + 15, Math.min(dayEndMinutes, endMinutes))
+    const range = dayEndMinutes - dayStartMinutes
+
+    return {
+      top: `${((clampedStart - dayStartMinutes) / range) * 100}%`,
+      height: `${Math.max(7, ((clampedEnd - clampedStart) / range) * 100)}%`,
+    }
+  }, [])
 
   const activeProjects = projects.filter((project) => !project.archived)
   const archivedProjects = projects.filter((project) => project.archived)
@@ -1687,38 +1709,38 @@ function App() {
             <div className="section-heading">
               <div>
                 <p className="eyebrow">Calendario semanal</p>
-                <h2>Semana visible</h2>
+                <h2>Agenda por horarios</h2>
               </div>
               <span>{focusHours}h ocupadas</span>
             </div>
-            <div className="weekly-calendar">
+            <div className="weekly-schedule">
+              <div className="schedule-corner" />
               {weekDays.map((day) => (
-                <div className={day.date === format(today, 'yyyy-MM-dd') ? 'week-day active' : 'week-day'} key={day.date}>
-                  <div className="week-day-header">
-                    <span>{day.label}</span>
-                    <strong>{day.day}</strong>
-                  </div>
-                  <div className="week-day-load">
-                    <i style={{ width: `${Math.max(8, Math.min(100, day.hours * 18))}%`, background: selectedTheme.chart }} />
-                  </div>
-                  <div className="week-events">
-                    {day.events.length ? (
-                      <>
-                        {day.events.slice(0, 3).map((event) => (
-                          <div className={`week-event ${event.focus}`} key={event.id}>
-                            <time>
-                              {shortTime(event.startsAt)} - {shortTime(event.endsAt)}
-                            </time>
-                            <span>{event.title}</span>
-                          </div>
-                        ))}
-                        {day.events.length > 3 && <small>+{day.events.length - 3} mas</small>}
-                      </>
-                    ) : (
-                      <small>Libre</small>
-                    )}
-                  </div>
+                <div className={day.date === format(today, 'yyyy-MM-dd') ? 'schedule-day-title active' : 'schedule-day-title'} key={day.date}>
+                  <span>{day.label}</span>
+                  <strong>{day.day}</strong>
                 </div>
+              ))}
+              <div className="schedule-hours">
+                {calendarHours.map((hour) => (
+                  <time key={hour}>{String(hour).padStart(2, '0')}:00</time>
+                ))}
+              </div>
+              {weekDays.map((day) => (
+                <div className={day.date === format(today, 'yyyy-MM-dd') ? 'schedule-day active' : 'schedule-day'} key={day.date}>
+                  {day.events.length ? (
+                    day.events.map((event) => (
+                      <div className={`schedule-event ${event.focus}`} key={event.id} style={getCalendarEventStyle(event)}>
+                        <time>
+                          {shortTime(event.startsAt)} - {shortTime(event.endsAt)}
+                        </time>
+                        <span>{event.title}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <span className="schedule-free">Libre</span>
+                  )}
+                  </div>
               ))}
             </div>
               </article>
@@ -1826,14 +1848,8 @@ function App() {
                 Guardar
               </button>
             </div>
-            <div className="sleep-history">
-              <div className="section-heading compact">
-                <div>
-                  <p className="eyebrow">Historial</p>
-                  <h3>Ultimos registros</h3>
-                </div>
-                <span>{recentSleepLogs.length} entradas</span>
-              </div>
+            <details className="sleep-history">
+              <summary>Ultimos registros ({recentSleepLogs.length})</summary>
               <div className="sleep-list">
                 {recentSleepLogs.length === 0 ? (
                   <div className="empty-state">No hay registros de sueno todavia.</div>
@@ -1916,7 +1932,7 @@ function App() {
                   ))
                 )}
               </div>
-            </div>
+            </details>
               </article>
             )}
 
