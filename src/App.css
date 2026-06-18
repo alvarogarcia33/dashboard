@@ -1063,10 +1063,30 @@ h3 {
     0 12px 28px var(--shadow);
 }
 
+.schedule-event.short {
+  align-content: center;
+  gap: 1px;
+  padding: 5px 7px;
+}
+
+.schedule-event.medium {
+  gap: 2px;
+  padding: 7px;
+}
+
 .schedule-event time {
   color: var(--muted);
   font-size: 11px;
   font-weight: 800;
+  line-height: 1.1;
+}
+
+.schedule-event.short time {
+  font-size: 9px;
+}
+
+.schedule-event.medium time {
+  font-size: 10px;
 }
 
 .schedule-event span {
@@ -1079,6 +1099,19 @@ h3 {
   font-size: 12px;
   font-weight: 800;
   line-height: 1.18;
+}
+
+.schedule-event.short span,
+.schedule-event.medium span {
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  line-height: 1.05;
+}
+
+.schedule-event.medium span {
+  font-size: 11px;
 }
 
 .schedule-free {

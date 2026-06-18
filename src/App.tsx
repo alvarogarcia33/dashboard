@@ -732,6 +732,13 @@ function App() {
       height: `${Math.max(7, ((clampedEnd - clampedStart) / range) * 100)}%`,
     }
   }, [])
+  const getCalendarEventClass = useCallback((event: Meeting) => {
+    const startsAt = parseISO(event.startsAt).getTime()
+    const endsAt = parseISO(event.endsAt).getTime()
+    const durationMinutes = Math.max(0, (endsAt - startsAt) / 1000 / 60)
+
+    return durationMinutes <= 45 ? 'short' : durationMinutes <= 75 ? 'medium' : 'long'
+  }, [])
 
   const activeProjects = projects.filter((project) => !project.archived)
   const archivedProjects = projects.filter((project) => project.archived)
@@ -1738,7 +1745,12 @@ function App() {
                 <div className={day.date === format(today, 'yyyy-MM-dd') ? 'schedule-day active' : 'schedule-day'} key={day.date}>
                   {day.events.length ? (
                     day.events.map((event) => (
-                      <div className={`schedule-event ${event.focus}`} key={event.id} style={getCalendarEventStyle(event)}>
+                      <div
+                        className={`schedule-event ${event.focus} ${getCalendarEventClass(event)}`}
+                        key={event.id}
+                        style={getCalendarEventStyle(event)}
+                        title={`${shortTime(event.startsAt)} - ${shortTime(event.endsAt)} · ${event.title}`}
+                      >
                         <time>
                           {shortTime(event.startsAt)} - {shortTime(event.endsAt)}
                         </time>
