@@ -410,27 +410,33 @@ async function fetchGoogleTasksWithToken(accessToken) {
   const taskGroups = await Promise.all(
     taskLists.map(async (list) => {
       const params = new URLSearchParams({
-        showCompleted: 'false',
-        showHidden: 'false',
+        showCompleted: 'true',
+        showDeleted: 'false',
+        showHidden: 'true',
         maxResults: '100',
       })
       const response = await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(list.id)}/tasks?${params}`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Cache-Control': 'no-cache',
+        },
       })
 
       if (!response.ok) return []
 
       const payload = await response.json().catch(() => ({}))
-      return (Array.isArray(payload.items) ? payload.items : []).map((task) => ({
-        id: `google-task-${list.id}-${task.id}`,
-        title: task.title ?? 'Tarea sin titulo',
-        listId: list.id,
-        listTitle: list.title ?? 'Google Tasks',
-        status: task.status ?? 'needsAction',
-        due: task.due,
-        notes: task.notes,
-        updated: task.updated,
-      }))
+      return (Array.isArray(payload.items) ? payload.items : [])
+        .filter((task) => task?.status !== 'completed' && !task.completed && !task.deleted && !task.hidden)
+        .map((task) => ({
+          id: `google-task-${list.id}-${task.id}`,
+          title: task.title ?? 'Tarea sin titulo',
+          listId: list.id,
+          listTitle: list.title ?? 'Google Tasks',
+          status: task.status ?? 'needsAction',
+          due: task.due,
+          notes: task.notes,
+          updated: task.updated,
+        }))
     }),
   )
 

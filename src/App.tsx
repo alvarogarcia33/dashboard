@@ -658,7 +658,7 @@ function App() {
 
     return googleTasks
       .filter((task) => {
-        if (task.status === 'completed') return false
+        if (String(task.status).toLowerCase() === 'completed') return false
         if (!task.due) return true
         const dueAt = parseISO(task.due).getTime()
         return dueAt <= endOfToday
