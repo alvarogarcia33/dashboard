@@ -121,6 +121,12 @@ type DashboardSnapshot = {
   sleepLogs: SleepLog[]
   theme: ThemeId
   dashboardPreferences: DashboardPreferences
+  integrations?: {
+    googleCalendarConnected: boolean
+    googleTasksConnected: boolean
+    lastGoogleSyncAt: string
+    googleSyncMessage: string
+  }
 }
 
 type AuthUser = {
@@ -785,6 +791,12 @@ function App() {
       sleepLogs,
       theme,
       dashboardPreferences,
+      integrations: {
+        googleCalendarConnected: isCalendarConnected,
+        googleTasksConnected: isCalendarConnected,
+        lastGoogleSyncAt,
+        googleSyncMessage: syncMessage,
+      },
     }
   }
 

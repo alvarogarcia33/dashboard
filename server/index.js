@@ -575,6 +575,8 @@ async function authorizeDashboardRequest(request, response) {
 }
 
 function normalizeSnapshot(snapshot) {
+  const integrations = snapshot?.integrations && typeof snapshot.integrations === 'object' ? snapshot.integrations : {}
+
   return {
     meetings: Array.isArray(snapshot?.meetings) ? snapshot.meetings : [],
     googleTasks: Array.isArray(snapshot?.googleTasks) ? snapshot.googleTasks : [],
@@ -592,6 +594,42 @@ function normalizeSnapshot(snapshot) {
             projects: true,
             ai: true,
           },
+    integrations: {
+      googleCalendarConnected: Boolean(integrations.googleCalendarConnected),
+      googleTasksConnected: Boolean(integrations.googleTasksConnected),
+      lastGoogleSyncAt: typeof integrations.lastGoogleSyncAt === 'string' ? integrations.lastGoogleSyncAt : '',
+      googleSyncMessage: typeof integrations.googleSyncMessage === 'string' ? integrations.googleSyncMessage : '',
+    },
+  }
+}
+
+function countDuplicateMeetings(meetings) {
+  const seen = new Map()
+
+  for (const meeting of meetings) {
+    const key = [meeting?.title ?? '', meeting?.startsAt ?? '', meeting?.endsAt ?? ''].join('|')
+    seen.set(key, (seen.get(key) ?? 0) + 1)
+  }
+
+  return [...seen.values()].filter((count) => count > 1).reduce((total, count) => total + count - 1, 0)
+}
+
+function buildAiGroundRules(snapshot) {
+  const duplicateMeetingCount = countDuplicateMeetings(snapshot.meetings)
+
+  return {
+    googleCalendarConnected: snapshot.integrations.googleCalendarConnected,
+    googleTasksConnected: snapshot.integrations.googleTasksConnected,
+    lastGoogleSyncAt: snapshot.integrations.lastGoogleSyncAt,
+    googleSyncMessage: snapshot.integrations.googleSyncMessage,
+    duplicateMeetingCount,
+    rules: [
+      'No digas que hay que conectar Google Calendar o Google Tasks si googleCalendarConnected/googleTasksConnected es true.',
+      'Si un proyecto o accion dice "conectar Google Calendar", tratalo como texto historico del proyecto, no como diagnostico tecnico de conexion.',
+      'No menciones eventos duplicados salvo que duplicateMeetingCount sea mayor que 0.',
+      'Si googleTasks esta vacio pero googleTasksConnected es true, di que no hay tareas visibles/sincronizadas para el periodo; no digas que falta captura o conexion.',
+      'No inventes fallas tecnicas. Solo menciona fallas si googleSyncMessage contiene un error explicito.',
+    ],
   }
 }
 
@@ -601,12 +639,13 @@ function buildDailySummaryPrompt(context) {
 
   return {
     today,
+    systemStatus: buildAiGroundRules(snapshot),
     meetings: snapshot.meetings,
     googleTasks: snapshot.googleTasks,
     projects: snapshot.projects,
     sleepLogs: snapshot.sleepLogs,
     instructions:
-      'Genera un resumen diario breve y accionable en espanol. Enfocate en prioridades, tareas, riesgos, energia, reuniones y proximas acciones. Devuelve JSON valido con las claves summary, priorities, risks, recommendations y focusBlocks.',
+      'Genera un resumen diario breve y accionable en espanol. Enfocate en prioridades, tareas, riesgos, energia, reuniones y proximas acciones. Respeta estrictamente systemStatus.rules. Devuelve JSON valido con las claves summary, priorities, risks, recommendations y focusBlocks.',
   }
 }
 
@@ -619,12 +658,13 @@ function buildWeeklyReportPrompt(context) {
   return {
     generatedAt: generatedAt.toISOString(),
     period: `${start.toISOString().slice(0, 10)} al ${generatedAt.toISOString().slice(0, 10)}`,
+    systemStatus: buildAiGroundRules(snapshot),
     meetings: snapshot.meetings,
     googleTasks: snapshot.googleTasks,
     projects: snapshot.projects,
     sleepLogs: snapshot.sleepLogs,
     instructions:
-      'Genera un reporte semanal ejecutivo y accionable en espanol. Cruza reuniones, tareas, sueno y proyectos para detectar avances, energia, riesgos y acciones concretas para la proxima semana. Devuelve JSON valido con las claves title, period, executiveSummary, meetingInsights, sleepInsights, projectInsights, wins, risks y nextWeekActions.',
+      'Genera un reporte semanal ejecutivo y accionable en espanol. Cruza reuniones, tareas, sueno y proyectos para detectar avances, energia, riesgos y acciones concretas para la proxima semana. Respeta estrictamente systemStatus.rules. Devuelve JSON valido con las claves title, period, executiveSummary, meetingInsights, sleepInsights, projectInsights, wins, risks y nextWeekActions.',
   }
 }
 
@@ -1047,7 +1087,7 @@ app.post('/api/openai/daily-summary', async (request, response) => {
         {
           role: 'system',
           content:
-            'Eres un asistente de productividad para un dashboard personal. Respondes en espanol, concreto, sin relleno y con recomendaciones accionables.',
+            'Eres un asistente de productividad para un dashboard personal. Respondes en espanol, concreto, sin relleno y con recomendaciones accionables. No inventes problemas tecnicos, conexiones faltantes ni duplicados: usa solo systemStatus y sus reglas.',
         },
         {
           role: 'user',
@@ -1130,7 +1170,7 @@ app.post('/api/openai/weekly-report', async (request, response) => {
         {
           role: 'system',
           content:
-            'Eres un analista de productividad personal para un dashboard ejecutivo. Escribes en espanol, concreto, con lectura gerencial y acciones claras. No inventes datos que no esten en el contexto.',
+            'Eres un analista de productividad personal para un dashboard ejecutivo. Escribes en espanol, concreto, con lectura gerencial y acciones claras. No inventes datos que no esten en el contexto ni problemas tecnicos, conexiones faltantes o duplicados: usa solo systemStatus y sus reglas.',
         },
         {
           role: 'user',
@@ -1231,6 +1271,7 @@ app.post('/api/openai/planner-chat', async (request, response) => {
 
   const context = {
     today: new Date().toISOString().slice(0, 10),
+    systemStatus: buildAiGroundRules(snapshot),
     meetings: snapshot.meetings,
     googleTasks: snapshot.googleTasks,
     projects: snapshot.projects,
@@ -1249,7 +1290,7 @@ app.post('/api/openai/planner-chat', async (request, response) => {
         {
           role: 'system',
           content:
-            'Eres un asistente de planificacion personal integrado a un dashboard. Responde en espanol rioplatense neutro, con pasos concretos, breve y accionable. Usa exclusivamente el contexto enviado; si falta informacion, dilo y sugiere que dato registrar.',
+            'Eres un asistente de planificacion personal integrado a un dashboard. Responde en espanol rioplatense neutro, con pasos concretos, breve y accionable. Usa exclusivamente el contexto enviado; si falta informacion, dilo y sugiere que dato registrar. Respeta systemStatus.rules: no inventes conexiones faltantes, duplicados ni fallas tecnicas.',
         },
         {
           role: 'user',
