@@ -1478,39 +1478,29 @@ function App() {
           </button>
         </section>
 
-        <section className="theme-panel" aria-labelledby="theme-title">
-          <div className="panel-title" id="theme-title">
-            <Palette size={17} />
-            Paleta
-          </div>
-          <div className="theme-options">
-            {themeOptions.map((option) => (
-              <button
-                className={option.id === selectedTheme.id ? 'theme-option active' : 'theme-option'}
-                key={option.id}
-                type="button"
-                onClick={() => setTheme(option.id)}
-                aria-pressed={option.id === selectedTheme.id}
-              >
-                <span className="swatches" aria-hidden="true">
-                  {option.swatches.map((color) => (
-                    <i key={color} style={{ background: color }} />
-                  ))}
-                </span>
-                <span>
-                  <strong>{option.name}</strong>
-                  <small>{option.description}</small>
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
-
         <section className="settings-panel">
           <div className="panel-title">
             <Settings2 size={17} />
             Dashboard
           </div>
+          <label className="theme-select-row">
+            <span>
+              <Palette size={15} />
+              Paleta
+            </span>
+            <select value={selectedTheme.id} onChange={(event) => setTheme(event.target.value as ThemeId)}>
+              {themeOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+            <span className="swatches compact" aria-hidden="true">
+              {selectedTheme.swatches.map((color) => (
+                <i key={color} style={{ background: color }} />
+              ))}
+            </span>
+          </label>
           <div className="preference-list">
             <label>
               <input

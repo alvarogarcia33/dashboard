@@ -338,45 +338,6 @@
   background: var(--nav-hover);
 }
 
-.theme-panel {
-  display: grid;
-  gap: 8px;
-}
-
-.theme-options {
-  display: grid;
-  gap: 6px;
-}
-
-.theme-option {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-  width: 100%;
-  padding: 7px;
-  color: var(--ink);
-  text-align: left;
-  border: 1px solid var(--line);
-  background: var(--surface);
-}
-
-.theme-option:hover,
-.theme-option.active {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-}
-
-.theme-option strong,
-.theme-option small {
-  display: block;
-}
-
-.theme-option small {
-  color: var(--muted);
-  font-size: 11px;
-}
-
 .swatches {
   display: flex;
   align-items: center;
@@ -392,6 +353,38 @@
 
 .swatches i + i {
   margin-left: -5px;
+}
+
+.swatches.compact {
+  justify-content: flex-end;
+}
+
+.theme-select-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.theme-select-row > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.theme-select-row select {
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 800;
+  background: var(--surface);
 }
 
 .integration-panel,
