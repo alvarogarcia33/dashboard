@@ -1743,14 +1743,14 @@ function App() {
             )}
 
             {dashboardPreferences.tasks && (
-              <article className="surface tasks-card" id="tareas">
-                <div className="section-heading">
+              <details className="surface tasks-card task-drawer" id="tareas">
+                <summary>
                   <div>
                     <p className="eyebrow">Google Tasks</p>
                     <h2>Tareas diarias</h2>
                   </div>
                   <span>{dailyGoogleTasks.length} visibles</span>
-                </div>
+                </summary>
 
                 <div className="task-list">
                   {dailyGoogleTasks.length ? (
@@ -1768,11 +1768,11 @@ function App() {
                   ) : (
                     <div className="empty-state">
                       <strong>No hay tareas importadas para hoy.</strong>
-                    <span>Conecta Google una vez para traerlas automaticamente.</span>
+                    <span>Google Tasks queda sincronizado automaticamente cuando haya pendientes.</span>
                     </div>
                   )}
                 </div>
-              </article>
+              </details>
             )}
 
             {dashboardPreferences.sleep && (

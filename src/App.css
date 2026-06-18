@@ -818,13 +818,13 @@ h3 {
 }
 
 .week-card {
-  grid-column: span 8;
+  grid-column: 1 / -1;
   order: 1;
 }
 
 .tasks-card {
-  grid-column: span 4;
-  order: 1;
+  grid-column: 1 / -1;
+  order: 2;
 }
 
 .sleep-card {
@@ -939,8 +939,8 @@ h3 {
 
 .weekly-schedule {
   display: grid;
-  grid-template-columns: 58px repeat(7, minmax(92px, 1fr));
-  grid-template-rows: 42px 520px;
+  grid-template-columns: 64px repeat(7, minmax(132px, 1fr));
+  grid-template-rows: 50px minmax(640px, 70vh);
   overflow-x: auto;
   border: 1px solid var(--glass-border);
   border-radius: 8px;
@@ -987,7 +987,7 @@ h3 {
 
 .schedule-day-title strong {
   color: var(--ink);
-  font-size: 22px;
+  font-size: 26px;
   line-height: 1;
 }
 
@@ -1010,16 +1010,16 @@ h3 {
 .schedule-hours time {
   display: flex;
   justify-content: flex-end;
-  padding: 4px 8px 0 0;
+  padding: 5px 10px 0 0;
   color: var(--muted);
   border-top: 1px solid color-mix(in srgb, var(--primary) 16%, var(--line));
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
 }
 
 .schedule-day {
   position: relative;
-  min-width: 92px;
+  min-width: 132px;
   border-left: 1px solid color-mix(in srgb, var(--primary) 14%, var(--line));
   background:
     repeating-linear-gradient(
@@ -1046,13 +1046,13 @@ h3 {
 
 .schedule-event {
   position: absolute;
-  left: 7px;
-  right: 7px;
+  left: 10px;
+  right: 10px;
   display: grid;
   align-content: start;
-  gap: 2px;
+  gap: 3px;
   overflow: hidden;
-  padding: 7px;
+  padding: 9px;
   border-left: 4px solid #2563eb;
   border-radius: 8px;
   background:
@@ -1065,7 +1065,7 @@ h3 {
 
 .schedule-event time {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -1073,10 +1073,12 @@ h3 {
   min-width: 0;
   overflow: hidden;
   color: var(--ink);
-  font-size: 11px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 12px;
   font-weight: 800;
-  line-height: 1.15;
-  text-overflow: ellipsis;
+  line-height: 1.18;
 }
 
 .schedule-free {
@@ -1175,10 +1177,63 @@ h3 {
 
 .task-list {
   display: grid;
-  max-height: 250px;
+  max-height: 220px;
   overflow-y: auto;
   gap: 8px;
   padding-right: 4px;
+}
+
+.task-drawer {
+  padding: 0;
+}
+
+.task-drawer summary {
+  display: flex;
+  cursor: pointer;
+  list-style: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.task-drawer summary::-webkit-details-marker {
+  display: none;
+}
+
+.task-drawer summary::after {
+  content: '+';
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--primary);
+  font-size: 20px;
+  font-weight: 900;
+  background: var(--surface-soft);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+.task-drawer[open] summary::after {
+  content: '-';
+}
+
+.task-drawer summary > span {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.task-drawer .task-list {
+  padding: 0 16px 16px;
+}
+
+.task-drawer .task-list:has(.task-row) {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
 .task-row {
