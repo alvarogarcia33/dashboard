@@ -886,19 +886,42 @@ app.post('/api/google/sync', async (request, response) => {
     }
 
     const accessToken = await refreshGoogleAccessToken(connection.refresh_token)
-    const [calendarSync, googleTasks] = await Promise.all([
-      fetchGoogleMeetingsWithToken(accessToken),
-      fetchGoogleTasksWithToken(accessToken),
-    ])
+    const errors = []
+    let calendarSync = null
+    let googleTasks = null
+
+    try {
+      calendarSync = await fetchGoogleMeetingsWithToken(accessToken)
+    } catch (error) {
+      errors.push(`Calendar: ${getErrorMessage(error)}`)
+    }
+
+    try {
+      googleTasks = await fetchGoogleTasksWithToken(accessToken)
+    } catch (error) {
+      errors.push(`Tasks: ${getErrorMessage(error)}`)
+    }
+
+    if (!calendarSync && !googleTasks) {
+      response.status(500).json({ ok: false, connected: true, message: errors.join(' | ') || 'Google rechazo la sincronizacion.' })
+      return
+    }
+
+    const messageParts = []
+    if (calendarSync) messageParts.push(`${calendarSync.meetings.length} eventos`)
+    if (googleTasks) messageParts.push(`${googleTasks.length} tareas`)
+    if (errors.length) messageParts.push(`con avisos: ${errors.join(' | ')}`)
 
     response.json({
       ok: true,
       connected: true,
-      meetings: calendarSync.meetings,
+      meetings: calendarSync?.meetings,
       googleTasks,
-      calendarsSynced: calendarSync.calendarsSynced,
-      failedCalendars: calendarSync.failedCalendars,
-      message: `${calendarSync.meetings.length} eventos y ${googleTasks.length} tareas sincronizados automaticamente.`,
+      meetingsSynced: Boolean(calendarSync),
+      tasksSynced: Boolean(googleTasks),
+      calendarsSynced: calendarSync?.calendarsSynced ?? 0,
+      failedCalendars: [...(calendarSync?.failedCalendars ?? []), ...errors],
+      message: `${messageParts.join(' y ')} sincronizados automaticamente.`,
       syncedAt: new Date().toISOString(),
     })
   } catch (error) {

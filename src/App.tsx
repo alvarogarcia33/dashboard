@@ -964,6 +964,8 @@ function App() {
         connected?: boolean
         meetings?: Meeting[]
         googleTasks?: GoogleTask[]
+        meetingsSynced?: boolean
+        tasksSynced?: boolean
         message?: string
         syncedAt?: string
         failedCalendars?: string[]
@@ -979,8 +981,12 @@ function App() {
         throw new Error(payload.message ?? 'No se pudo sincronizar Google.')
       }
 
-      setMeetings((current) => [...current.filter((meeting) => meeting.source !== 'google'), ...(payload.meetings ?? [])])
-      setGoogleTasks(payload.googleTasks ?? [])
+      if (payload.meetingsSynced && Array.isArray(payload.meetings)) {
+        setMeetings((current) => [...current.filter((meeting) => meeting.source !== 'google'), ...(payload.meetings ?? [])])
+      }
+      if (payload.tasksSynced && Array.isArray(payload.googleTasks)) {
+        setGoogleTasks(payload.googleTasks)
+      }
       setIsCalendarConnected(true)
       setLastGoogleSyncAt(payload.syncedAt ?? new Date().toISOString())
       setSyncMessage(
